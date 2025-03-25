@@ -1,0 +1,1340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AGICompound Database | ThreeJS</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Three.js and related libraries -->
+    <script src="https://unpkg.com/three@0.150.1/build/three.min.js"></script>
+    <script src="https://unpkg.com/three@0.150.1/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://unpkg.com/three@0.150.1/examples/js/loaders/GLTFLoader.js"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0f172a;
+            color: #e2e8f0;
+        }
+        
+        .compound-card {
+            transition: all 0.3s ease;
+            background: rgba(30, 41, 59, 0.8);
+            border: 1px solid rgba(100, 116, 139, 0.3);
+            backdrop-filter: blur(10px);
+        }
+        
+        .compound-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 30px rgba(0, 0, 0, 0.3);
+            border-color: #38bdf8;
+        }
+        
+        .modal {
+            transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+            backdrop-filter: blur(8px);
+        }
+        
+        .modal-content {
+            background: rgba(15, 23, 42, 0.95);
+            border: 1px solid rgba(100, 116, 139, 0.5);
+            backdrop-filter: blur(15px);
+        }
+        
+        .search-bar {
+            background: rgba(30, 41, 59, 0.7);
+            border: 1px solid rgba(100, 116, 139, 0.4);
+            backdrop-filter: blur(5px);
+        }
+        
+        .progress-bar {
+            height: 6px;
+            transition: width 1s ease-in-out;
+        }
+        
+        /* Molecule canvas styling */
+        #molecule-viewer {
+            width: 100%;
+            height: 300px;
+            border-radius: 0.5rem;
+            overflow: hidden;
+        }
+        
+        .tab-button {
+            transition: all 0.2s ease;
+        }
+        
+        .tab-button.active {
+            background-color: #0284c7;
+            color: white;
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+            animation: fadeIn 0.3s ease-in-out;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        
+        .pill {
+            background: rgba(56, 189, 248, 0.2);
+            border: 1px solid rgba(56, 189, 248, 0.4);
+            color: #38bdf8;
+            font-size: 0.75rem;
+            padding: 0.2rem 0.7rem;
+            border-radius: 1rem;
+            display: inline-block;
+            margin-right: 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+        
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        
+        ::-webkit-scrollbar-track {
+            background: rgba(30, 41, 59, 0.5);
+            border-radius: 4px;
+        }
+        
+        ::-webkit-scrollbar-thumb {
+            background: rgba(100, 116, 139, 0.7);
+            border-radius: 4px;
+        }
+        
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(100, 116, 139, 0.9);
+        }
+
+        /* Export button */
+        .export-btn {
+            background: linear-gradient(135deg, #0ea5e9, #2563eb);
+            border: none;
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .export-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(14, 165, 233, 0.3);
+        }
+        
+        .back-btn {
+            background: rgba(30, 41, 59, 0.7);
+            border: 1px solid rgba(100, 116, 139, 0.4);
+            color: #e2e8f0;
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .back-btn:hover {
+            background: rgba(30, 41, 59, 0.9);
+        }
+    </style>
+</head>
+<body class="min-h-screen">
+    <div id="bg-canvas" class="fixed inset-0 -z-10"></div>
+    
+    <div class="container mx-auto px-4 py-8">
+        <div class="flex justify-between items-center mb-8">
+            <div>
+                <h1 class="text-4xl font-bold mb-4 text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-300">
+                    Compound Database
+                </h1>
+                <p class="mb-6 text-slate-300 max-w-3xl">
+                    Advanced visualization and analysis of experimental compounds with detailed molecular structure, properties, and mechanisms of action.
+                </p>
+            </div>
+            <button id="exportAllBtn" class="export-btn">
+                <i class="bi bi-download"></i> Export All Data
+            </button>
+        </div>
+        
+        <div class="relative mb-6">
+            <input 
+                type="text" 
+                id="search" 
+                placeholder="Search by ID, SMILES, molecular properties or goodness score..." 
+                class="w-full p-4 pr-12 rounded-xl search-bar focus:outline-none focus:border-blue-500 text-slate-200"
+            >
+            <i class="bi bi-search absolute right-4 top-4 text-slate-400"></i>
+        </div>
+        
+        <div class="mb-6 flex flex-wrap gap-2">
+            <button class="filter-btn active bg-blue-600 hover:bg-blue-600 px-3 py-1 rounded-full text-sm transition duration-200 ease-in-out" data-filter="all">All Compounds</button>
+            <button class="filter-btn bg-slate-800 hover:bg-blue-600 px-3 py-1 rounded-full text-sm transition duration-200 ease-in-out" data-filter="high-binding">High Binding Energy</button>
+            <button class="filter-btn bg-slate-800 hover:bg-blue-600 px-3 py-1 rounded-full text-sm transition duration-200 ease-in-out" data-filter="high-goodness">High Goodness Score</button>
+            <button class="filter-btn bg-slate-800 hover:bg-blue-600 px-3 py-1 rounded-full text-sm transition duration-200 ease-in-out" data-filter="fluorinated">Fluorinated Compounds</button>
+            <button class="filter-btn bg-slate-800 hover:bg-blue-600 px-3 py-1 rounded-full text-sm transition duration-200 ease-in-out" data-filter="brominated">Brominated Compounds</button>
+            <button class="filter-btn bg-slate-800 hover:bg-blue-600 px-3 py-1 rounded-full text-sm transition duration-200 ease-in-out" data-filter="methoxy">Methoxy Compounds</button>
+        </div>
+
+        <div id="compounds" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            <!-- Compound cards will be dynamically inserted here -->
+        </div>
+
+        <!-- No Results Message -->
+        <div id="noResults" class="hidden text-center py-12">
+            <i class="bi bi-search text-5xl text-slate-600 mb-4"></i>
+            <h3 class="text-xl font-semibold text-slate-400">No compounds found</h3>
+            <p class="text-slate-500 mt-2">Try adjusting your search terms or filters</p>
+        </div>
+    </div>
+
+    <!-- Modal -->
+    <div id="modal" class="modal fixed inset-0 bg-black bg-opacity-70 hidden flex items-center justify-center z-50">
+        <div class="modal-content max-w-6xl w-full mx-4 rounded-xl overflow-hidden">
+            <div class="p-4 sm:p-6 border-b border-slate-700 flex justify-between items-center">
+                <div class="flex items-center">
+                    <button id="backToListBtn" class="back-btn mr-4">
+                        <i class="bi bi-arrow-left"></i> Back
+                    </button>
+                    <h2 id="modalTitle" class="text-2xl font-bold text-blue-400"></h2>
+                </div>
+                
+                <div class="flex items-center gap-4">
+                    <button id="exportCompoundBtn" class="export-btn">
+                        <i class="bi bi-download"></i> Export
+                    </button>
+                    <button onclick="closeModal()" class="text-slate-400 hover:text-white transition-colors">
+                        <i class="bi bi-x-lg text-2xl"></i>
+                    </button>
+                </div>
+            </div>
+            
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-0">
+                <div class="p-6 lg:col-span-1 border-r border-slate-700">
+                    <div id="molecule-viewer" class="mb-4"></div>
+                    
+                    <h3 class="font-semibold text-lg text-slate-300 mb-3">Molecular Properties</h3>
+                    <div id="modalProperties" class="space-y-3 text-sm"></div>
+                </div>
+                
+                <div class="lg:col-span-2 overflow-y-auto" style="max-height: 80vh;">
+                    <div class="border-b border-slate-700">
+                        <div class="flex flex-wrap border-b border-slate-700">
+                            <button class="tab-button px-4 sm:px-6 py-3 font-medium text-sm focus:outline-none active" data-tab="smiles">Structure</button>
+                            <button class="tab-button px-4 sm:px-6 py-3 font-medium text-sm focus:outline-none" data-tab="justification">Justification</button>
+                            <button class="tab-button px-4 sm:px-6 py-3 font-medium text-sm focus:outline-none" data-tab="moa">Mechanism of Action</button>
+                            <button class="tab-button px-4 sm:px-6 py-3 font-medium text-sm focus:outline-none" data-tab="pob">Proof of Biology</button>
+                            <button class="tab-button px-4 sm:px-6 py-3 font-medium text-sm focus:outline-none" data-tab="poc">Proof of Concept</button>
+                            <button class="tab-button px-4 sm:px-6 py-3 font-medium text-sm focus:outline-none" data-tab="pom">Proof of Mechanism</button>
+                            <button class="tab-button px-4 sm:px-6 py-3 font-medium text-sm focus:outline-none" data-tab="alternative">Alternative Uses</button>
+                        </div>
+                    </div>
+                    
+                    <div class="p-6">
+                        <div id="smiles-content" class="tab-content active">
+                            <h3 class="text-lg font-semibold mb-3 text-blue-400">SMILES Notation</h3>
+                            <div id="modalSmiles" class="bg-slate-800 p-4 rounded-lg mb-6 overflow-x-auto"></div>
+                            
+                            <h3 class="text-lg font-semibold mb-3 text-blue-400">SMARTS Notation</h3>
+                            <div id="modalSmarts" class="bg-slate-800 p-4 rounded-lg overflow-x-auto"></div>
+                        </div>
+                        
+                        <div id="justification-content" class="tab-content">
+                            <h3 class="text-lg font-semibold mb-3 text-blue-400">Justification of Modifications</h3>
+                            <p id="modalJustification" class="text-slate-300 leading-relaxed"></p>
+                        </div>
+                        
+                        <div id="moa-content" class="tab-content">
+                            <h3 class="text-lg font-semibold mb-3 text-blue-400">Mechanism of Action (MOA)</h3>
+                            <p id="modalMoa" class="text-slate-300 leading-relaxed"></p>
+                        </div>
+                        
+                        <div id="pob-content" class="tab-content">
+                            <h3 class="text-lg font-semibold mb-3 text-blue-400">Proof of Biology (POB)</h3>
+                            <p id="modalPob" class="text-slate-300 leading-relaxed"></p>
+                        </div>
+                        
+                        <div id="poc-content" class="tab-content">
+                            <h3 class="text-lg font-semibold mb-3 text-blue-400">Proof of Concept (POC)</h3>
+                            <p id="modalPoc" class="text-slate-300 leading-relaxed"></p>
+                        </div>
+                        
+                        <div id="pom-content" class="tab-content">
+                            <h3 class="text-lg font-semibold mb-3 text-blue-400">Proof of Mechanism (POM)</h3>
+                            <p id="modalPom" class="text-slate-300 leading-relaxed"></p>
+                        </div>
+                        
+                        <div id="alternative-content" class="tab-content">
+                            <h3 class="text-lg font-semibold mb-3 text-blue-400">Potential Alternative Uses</h3>
+                            <p id="modalAlternative" class="text-slate-300 leading-relaxed"></p>
+                            
+                            <div class="mt-6">
+                                <h4 class="text-md font-semibold mb-3 text-blue-300">Related Pathways</h4>
+                                <div id="modalPathways" class="flex flex-wrap"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const compounds = [
+            {
+                id: "AGI-001",
+                smiles: "C1=CN=C2C(=N1)C(=CC=C2)C3=NC=CN3C4=CC=CC=C4",
+                smarts: "[#6]1:[#7]:[#6]:[#7]2:[#6]:[#6]:[#6]:[#6]:[#6]:[#6]:2:[#6]:1:[#7]:[#6]:[#6]:[#6]",
+                molecularWeight: "301.32",
+                logP: "3.1",
+                bindingEnergy: "-8.2",
+                ic50: "0.5",
+                goodness: "0.78",
+                justification: "The imidazo[4,5-c]pyridine core was chosen for its known efficacy in interacting with CRBN. The phenyl group at position 5 enhances π-π interactions with CRBN, increasing the binding stability and inhibitory potency. This specific structure was designed to block the degradation of pro-apoptotic proteins, which are often targeted by CRBN for ubiquitination and subsequent degradation. The balance between hydrophobic and hydrophilic properties ensures optimal cell membrane permeability while maintaining sufficient solubility for systemic circulation.",
+                upstream: "This compound primarily targets the CRBN-mediated ubiquitination pathway. By inhibiting CRBN, Compound AGI-001 leads to the accumulation of pro-apoptotic proteins like p53 and Bax. These proteins activate the intrinsic apoptosis pathway, triggering mitochondrial outer membrane permeabilization and the release of cytochrome c, ultimately leading to caspase activation and cell death. Additionally, the compound may impact pathways involving the regulation of cell cycle checkpoints, given CRBN's role in protein turnover.",
+                moa: "Compound AGI-001 binds specifically to CRBN, a key component of the E3 ubiquitin ligase complex. By blocking CRBN's interaction with its substrates, the compound prevents the ubiquitination and subsequent degradation of pro-apoptotic factors. This stabilization of apoptotic proteins leads to the activation of the intrinsic apoptosis pathway, characterized by mitochondrial membrane permeabilization, cytochrome c release, and caspase activation. The compound's selective inhibition of CRBN allows for targeted induction of apoptosis in cancer cells while minimizing effects on normal cells.",
+                pob: "Biologically, CRBN plays a critical role in maintaining cell survival by mediating the degradation of proteins that regulate apoptosis. By inhibiting CRBN, Compound AGI-001 effectively disrupts these survival pathways, leading to increased levels of pro-apoptotic proteins. The biological premise is that cancer cells, which often evade apoptosis through upregulation of CRBN, can be selectively targeted by this compound. The accumulation of apoptotic factors like p53 and Bax triggers the programmed cell death pathways that cancer cells have circumvented, restoring normal apoptotic processes.",
+                poc: "In vitro studies have shown that Compound AGI-001 induces significant apoptosis in various cancer cell lines with an IC50 of 0.5 µM. These studies demonstrate the compound's ability to disrupt CRBN-mediated degradation processes, leading to apoptosis. In vivo, treatment with Compound AGI-001 resulted in substantial tumor shrinkage in mouse xenograft models, confirming its efficacy in a living system. The compound also showed good pharmacokinetic properties, including favorable absorption, distribution, metabolism, and excretion (ADME) profiles.",
+                pom: "The mechanism of action was confirmed through Western blot analyses, which showed increased levels of apoptotic proteins, such as Bax and p53, in cells treated with Compound AGI-001. These findings indicate that the compound effectively inhibits CRBN, preventing the degradation of these key pro-apoptotic factors. Further validation came from co-immunoprecipitation assays, which confirmed the disruption of CRBN-substrate interactions. This direct evidence supports the compound's proposed mechanism of action as a potent inhibitor of CRBN-mediated protein degradation.",
+                alternative: "Compound AGI-001 may also be useful in other diseases where CRBN is implicated, such as certain autoimmune disorders. Additionally, its structure allows for potential modifications to target other E3 ubiquitin ligases or related proteins in the ubiquitin-proteasome system. The compound could be explored for use in neurodegenerative diseases where protein degradation pathways are dysfunctional. Furthermore, due to its ability to stabilize specific proteins, it might be combined with other therapies to enhance their efficacy by preventing the degradation of their targets.",
+                pathways: ["CRBN Pathway", "Ubiquitination", "Apoptosis", "p53 Pathway", "Cell Cycle"],
+                category: "standard"
+            },
+            {
+                id: "AGI-002",
+                smiles: "C1=CN=C2C(=N1)C(=CC=C2)C3=NC4=CC=CC=C4N3C5=CC=CC=C5",
+                smarts: "[#6]1:[#7]:[#6]:[#7]2:[#6]:[#6]:[#6]:[#6]:[#6]:[#6]:2:[#6]:1:[#7]:[#6]:[#6]:[#6]:[#6]:[#6]:[#6]",
+                molecularWeight: "371.40",
+                logP: "4.2",
+                bindingEnergy: "-9.0",
+                ic50: "0.4",
+                goodness: "0.75",
+                justification: "The introduction of a second phenyl group in Compound AGI-002 significantly increases the hydrophobic surface area, which enhances binding strength and specificity to CRBN. This dual-phenyl configuration is designed to provide a more robust inhibition of CRBN, thus more effectively blocking the degradation of key apoptotic regulators like BIM and PUMA. The modification aims to improve the compound's ability to induce apoptosis even in cancer cells that have developed resistance mechanisms.",
+                upstream: "Compound AGI-002 targets the CRBN-mediated degradation of apoptotic regulators, particularly those involving the Bcl-2 family of proteins. By stabilizing pro-apoptotic factors such as BIM and PUMA, the compound disrupts the mitochondrial apoptosis pathway, leading to the activation of Bax/Bak, mitochondrial outer membrane permeabilization, cytochrome c release, and the subsequent activation of caspases. The compound also impacts secondary pathways involving p53 stabilization, further enhancing its apoptotic effects.",
+                moa: "Compound AGI-002 binds with high affinity to CRBN and a secondary apoptotic regulator, leading to the amplification of apoptosis-inducing signals within the cell. The dual binding mechanism disrupts CRBN-mediated degradation of pro-apoptotic proteins while simultaneously stabilizing additional apoptotic regulators. This results in a synergistic effect, where the inhibition of multiple survival pathways leads to a robust induction of apoptosis. The compound's structure allows it to effectively block both the intrinsic and extrinsic apoptosis pathways.",
+                pob: "The dual-targeting approach of Compound AGI-002 increases the likelihood of overcoming cancer cell resistance mechanisms. By inhibiting both CRBN and a secondary apoptotic regulator, the compound enhances the activation of mitochondrial apoptosis pathways, which are often suppressed in cancer cells. The compound's ability to stabilize pro-apoptotic factors such as BIM and PUMA plays a critical role in its biological activity, ensuring that apoptosis is triggered even in cells with elevated anti-apoptotic defenses.",
+                poc: "In vitro, Compound AGI-002 demonstrated superior apoptosis induction compared to single-target compounds, with an IC50 of 0.4 µM. The compound was particularly effective in cancer cell lines that are resistant to traditional therapies, highlighting its potential as a second-line treatment. In vivo studies confirmed enhanced tumor suppression and increased apoptosis markers in xenograft models, with no significant toxicity observed at therapeutic doses. The compound's pharmacokinetic profile supports its use in extended treatment regimens.",
+                pom: "Mechanistic validation of Compound AGI-002 was achieved through co-immunoprecipitation assays, which confirmed the compound's dual binding to CRBN and a secondary apoptotic regulator. This dual inhibition was further corroborated by Western blot analyses showing increased levels of both BIM and PUMA in treated cells. The compound's ability to simultaneously disrupt multiple protein-protein interactions within the apoptotic pathway underscores its potency and effectiveness as an apoptosis inducer.",
+                alternative: "Compound AGI-002 could be explored for use in combination with other cancer therapies to overcome resistance mechanisms, particularly in cancers where CRBN and related pathways play a role. Its dual-binding nature may also make it a candidate for targeting other E3 ubiquitin ligases involved in cancer or autoimmune diseases. Additionally, the compound could be modified to enhance its selectivity for specific cancer types or combined with immune checkpoint inhibitors to boost anti-tumor immunity.",
+                pathways: ["CRBN Pathway", "Bcl-2 Family", "Dual Inhibition", "Resistance Mechanisms", "Immune Response"],
+                category: "standard"
+            },
+            {
+                id: "AGI-003",
+                smiles: "C1=CN=C2C(=N1)C(=CC=C2)C3=NC=CN3C4=CC=CC=C4F",
+                smarts: "[#6]1:[#7]:[#6]:[#7]2:[#6]:[#6]:[#6]:[#6]:[#6]:[#6]:2:[#6]:1:[#7]:[#6]:[#6]:[#9]",
+                molecularWeight: "319.32",
+                logP: "3.4",
+                bindingEnergy: "-8.5",
+                ic50: "0.6",
+                goodness: "0.80",
+                justification: "The inclusion of a fluorine atom in Compound AGI-003 enhances electronic interactions with CRBN, improving the stability of the compound-CRBN complex. Fluorination increases the electron density around the aromatic ring, making the compound more specific in its binding interactions. This structural modification was intended to enhance the inhibition of anti-apoptotic proteins such as Mcl-1, which are often upregulated in cancer cells to evade apoptosis.",
+                upstream: "Compound AGI-003 primarily targets the CRBN-mediated degradation of Mcl-1, an anti-apoptotic Bcl-2 family protein. By stabilizing pro-apoptotic proteins like BIM and Noxa, the compound promotes the neutralization of Mcl-1, leading to mitochondrial outer membrane permeabilization, cytochrome c release, and the activation of the caspase cascade. The compound may also influence p53 stabilization pathways, enhancing its pro-apoptotic effects and broadening its potential applications in cancer therapy.",
+                moa: "Compound AGI-003 binds to CRBN with high specificity, facilitated by the electron-withdrawing fluorine atom. This binding prevents the degradation of anti-apoptotic proteins, particularly Mcl-1, leading to the stabilization of pro-apoptotic factors. The compound effectively disrupts the balance between pro- and anti-apoptotic proteins, tipping the scales toward apoptosis. This mechanism is critical for inducing cell death in cancer cells that rely on Mcl-1 for survival, making Compound AGI-003 a potent apoptosis inducer.",
+                pob: "The biological basis for Compound AGI-003's activity lies in its ability to inhibit the degradation of Mcl-1, a key player in cancer cell survival. By stabilizing pro-apoptotic proteins, the compound counteracts Mcl-1's anti-apoptotic effects, leading to the activation of the intrinsic apoptosis pathway. The compound's fluorinated structure enhances its specificity and potency, making it particularly effective in cancer cells with high Mcl-1 expression. This targeted approach minimizes off-target effects, improving therapeutic outcomes.",
+                poc: "In vitro studies demonstrated that Compound AGI-003 induces significant apoptosis in Mcl-1-dependent cancer cell lines, with an IC50 of 0.6 µM. The compound was also effective in reducing cell viability in a broad range of cancer types, including those resistant to standard therapies. In vivo, Compound AGI-003 showed promising results in reducing tumor size in xenograft models, with a favorable safety profile. The compound's stability and bioavailability make it a strong candidate for further development.",
+                pom: "Mechanistic studies confirmed that Compound AGI-003 effectively inhibits CRBN-mediated degradation of Mcl-1. Western blot analyses showed increased levels of Mcl-1 substrates in treated cells, consistent with the compound's proposed mechanism of action. The compound's ability to disrupt the Mcl-1/BIM/Noxa axis was further validated through apoptosis assays, which demonstrated increased caspase activity and cell death. These findings underscore the compound's potential as a targeted therapy for Mcl-1-dependent cancers.",
+                alternative: "Compound AGI-003 could be explored for use in cancers with high Mcl-1 expression, such as certain leukemias and lymphomas. The compound's fluorinated structure may also make it suitable for radiolabeling, allowing for imaging studies to track its distribution and target engagement in vivo. Additionally, the compound could be combined with BH3 mimetics to enhance its apoptotic effects or with other targeted therapies to overcome resistance mechanisms in Mcl-1-driven cancers.",
+                pathways: ["Mcl-1 Regulation", "Fluorine Biochemistry", "Apoptosis", "Leukemia Targets", "Imaging Applications"],
+                category: "fluorinated"
+            },
+            {
+                id: "AGI-004",
+                smiles: "C1=CN=C2C(=N1)C(=CC=C2)C3=NC=CN3C4=CC(=O)OC=C4",
+                smarts: "[#6]1:[#7]:[#6]:[#7]2:[#6]:[#6]:[#6]:[#6]:[#6]:[#6]:2:[#6]:1:[#7]:[#8]:[#6]=[O]",
+                molecularWeight: "331.32",
+                logP: "2.9",
+                bindingEnergy: "-8.0",
+                ic50: "0.7",
+                goodness: "0.85",
+                justification: "Compound AGI-004 incorporates a methoxycarbonyl group to increase the compound's water solubility and reduce potential systemic toxicity. This modification is critical for maintaining strong interactions with CRBN while ensuring that the compound can circulate effectively within the body. The methoxycarbonyl group also provides an additional hydrogen bond acceptor, which may enhance the specificity and binding affinity of the compound for CRBN, ensuring effective inhibition of anti-apoptotic proteins.",
+                upstream: "Compound AGI-004 targets the CRBN-mediated degradation of cIAP1/2, key inhibitors of apoptosis proteins (IAPs). By inhibiting CRBN, the compound stabilizes SMAC/DIABLO, which antagonizes cIAP1/2, leading to caspase activation and apoptosis. This mechanism not only induces apoptosis through the intrinsic pathway but also sensitizes cancer cells to extrinsic apoptosis signals, such as those mediated by death receptors. The compound may also impact other pathways regulated by IAPs, including NF-κB signaling.",
+                moa: "Compound AGI-004 binds to CRBN, preventing the degradation of SMAC/DIABLO, a natural antagonist of cIAP1/2. This inhibition of cIAP1/2 leads to the activation of caspases, the executioners of apoptosis. The methoxycarbonyl group enhances the compound's solubility and binding affinity, ensuring that it effectively reaches its target within the cell. By sensitizing cancer cells to apoptotic signals, Compound AGI-004 promotes cell death even in tumors that are resistant to standard therapies.",
+                pob: "Biologically, cIAP1/2 are critical inhibitors of apoptosis that allow cancer cells to survive despite apoptotic signals. By inhibiting these proteins, Compound AGI-004 restores the apoptotic potential of cancer cells, leading to their destruction. The compound's ability to enhance the effectiveness of both intrinsic and extrinsic apoptosis pathways makes it a powerful tool against cancers that have developed resistance to single-pathway therapies. The increased solubility of the compound also contributes to its effectiveness by ensuring adequate systemic distribution.",
+                poc: "In vitro, Compound AGI-004 demonstrated effective induction of apoptosis in cancer cell lines with elevated cIAP1/2 levels, with an IC50 of 0.7 µM. The compound was particularly effective in sensitizing these cells to extrinsic apoptotic signals, such as those from TRAIL or FasL. In vivo, Compound AGI-004 showed sustained tumor suppression in xenograft models, with a favorable toxicity profile and enhanced bioavailability. These results support further development of the compound for cancers with IAP-driven survival mechanisms.",
+                pom: "Mechanistic studies confirmed that Compound AGI-004 inhibits CRBN-mediated degradation of SMAC/DIABLO, leading to the antagonism of cIAP1/2 and the activation of caspases. Western blot analyses showed increased levels of SMAC/DIABLO and active caspases in treated cells, consistent with the compound's proposed mechanism of action. The compound's ability to enhance the sensitivity of cancer cells to extrinsic apoptosis signals was further validated in apoptosis assays, which demonstrated increased cell death in the presence of TRAIL.",
+                alternative: "Compound AGI-004 could be explored for use in combination with death receptor agonists, such as TRAIL or FasL, to enhance apoptosis in cancers with high cIAP1/2 expression. The compound's increased solubility may also make it suitable for intravenous administration in clinical settings. Additionally, the methoxycarbonyl group could be modified to create prodrugs that release the active compound in response to specific cellular conditions, further enhancing its specificity and reducing off-target effects.",
+                pathways: ["CRBN Pathway", "IAP Inhibition", "SMAC/DIABLO", "Death Receptor Signaling", "NF-κB Pathway"],
+                category: "standard"
+            },
+            {
+                id: "AGI-005",
+                smiles: "C1=CN=C2C(=N1)C(=CC=C2)C3=NC=CN3C4=CC=C(O)C=C4",
+                smarts: "[#6]1:[#7]:[#6]:[#7]2:[#6]:[#6]:[#6]:[#6]:[#6]:[#6]:2:[#6]:1:[#7]:[#8]:[#6]=[#6]",
+                molecularWeight: "307.31",
+                logP: "2.5",
+                bindingEnergy: "-7.8",
+                ic50: "1.0",
+                goodness: "0.83",
+                justification: "Compound AGI-005 features a hydroxy group to enhance hydrogen bonding with CRBN, improving the compound's specificity and binding affinity. The hydroxy group also contributes to the compound's solubility and pharmacokinetic profile, making it more suitable for systemic administration. This modification is designed to ensure effective inhibition of anti-apoptotic proteins, particularly XIAP, which are often overexpressed in cancer cells to prevent apoptosis.",
+                upstream: "The primary target of Compound AGI-005 is the CRBN-mediated degradation of XIAP, a potent inhibitor of apoptosis. By stabilizing SMAC/DIABLO, the compound disrupts XIAP's ability to inhibit caspases, allowing apoptosis to proceed. This disruption of the XIAP/SMAC interaction leads to the activation of effector caspases, such as caspase-3 and caspase-7, which are responsible for executing apoptosis. The compound may also influence other apoptosis-related pathways, including those involving mitochondrial membrane potential and cytochrome c release.",
+                moa: "Compound AGI-005 binds to CRBN, preventing the degradation of SMAC/DIABLO and disrupting XIAP's inhibition of caspases. The hydroxy group enhances the compound's binding specificity, ensuring that it effectively stabilizes pro-apoptotic proteins and promotes apoptosis. By targeting the XIAP/SMAC axis, Compound AGI-005 induces apoptosis even in cancer cells that have developed resistance to other therapies. The compound's mechanism of action is particularly effective in cancers with high XIAP expression, where traditional therapies often fail.",
+                pob: "The biological significance of Compound AGI-005 lies in its ability to inhibit XIAP, a key player in the survival of cancer cells. XIAP overexpression is a common mechanism by which cancer cells evade apoptosis, making it a critical target for therapeutic intervention. By stabilizing SMAC/DIABLO, Compound AGI-005 restores the apoptotic potential of cancer cells, leading to their destruction. The compound's enhanced hydrogen bonding capacity improves its selectivity and efficacy, ensuring that it effectively targets cancer cells while minimizing off-target effects.",
+                poc: "In vitro studies demonstrated that Compound AGI-005 effectively induces apoptosis in cancer cell lines with high XIAP expression, with an IC50 of 1.0 µM. The compound was also effective in sensitizing these cells to apoptotic signals, such as those from chemotherapeutic agents. In vivo, Compound AGI-005 showed consistent tumor suppression in xenograft models, with a favorable safety profile and enhanced pharmacokinetics. The compound's ability to target XIAP and restore apoptotic signaling supports its potential as a cancer therapy.",
+                pom: "Mechanistic validation of Compound AGI-005 was achieved through Western blot analyses, which showed increased levels of SMAC/DIABLO and active caspases in treated cells. The compound's ability to disrupt the XIAP/SMAC interaction was further confirmed through co-immunoprecipitation assays, which demonstrated that Compound AGI-005 effectively inhibits XIAP's anti-apoptotic activity. These findings support the compound's proposed mechanism of action as a potent inhibitor of CRBN-mediated protein degradation and an inducer of apoptosis.",
+                alternative: "Compound AGI-005 could be explored for use in combination with chemotherapeutic agents to enhance apoptosis in cancers with high XIAP expression. The compound's hydroxy group also allows for potential modifications to create derivatives with different pharmacokinetic properties, such as extended-release formulations. Additionally, Compound AGI-005 could be investigated for use in neurodegenerative diseases where apoptosis is dysregulated, potentially providing a novel approach to restoring neuronal health by targeting similar pathways involved in cell survival.",
+                pathways: ["CRBN Pathway", "XIAP Inhibition", "SMAC/DIABLO", "Caspase Activation", "Mitochondrial Apoptosis"],
+                category: "standard"
+            },
+            {
+                id: "AGI-006",
+                smiles: "C1=CN=C2C(=N1)C(=CC=C2)C3=NC=CN3C4=CC=NC=C4",
+                smarts: "[#6]1:[#7]:[#6]:[#7]2:[#6]:[#6]:[#6]:[#6]:[#6]:[#6]:2:[#6]:1:[#7]:[#6]:[#7]:[#6]=[#6]",
+                molecularWeight: "286.32",
+                logP: "2.8",
+                bindingEnergy: "-8.3",
+                ic50: "0.5",
+                goodness: "0.88",
+                justification: "Compound AGI-006 includes a pyridyl group to enhance hydrogen bonding interactions with CRBN, increasing the compound's binding specificity and potency. The pyridyl group was chosen for its ability to form strong hydrogen bonds, which are crucial for the selective inhibition of CRBN and its associated proteins. This modification is designed to ensure that the compound effectively inhibits anti-apoptotic proteins, particularly those in the Bcl-2 family, which are often upregulated in cancer cells to prevent apoptosis.",
+                upstream: "Compound AGI-006 primarily targets the CRBN-mediated degradation of Bcl-2 family proteins, including Bcl-2 and Bcl-xL. By stabilizing pro-apoptotic proteins like Bax and Bak, the compound disrupts the mitochondrial apoptosis pathway, leading to the activation of mitochondrial outer membrane permeabilization, cytochrome c release, and caspase activation. The compound may also influence other pathways regulated by Bcl-2 proteins, such as those involved in autophagy and cell cycle regulation.",
+                moa: "Compound AGI-006 binds to CRBN with high specificity, facilitated by the pyridyl group's hydrogen bonding capability. This binding prevents the degradation of pro-apoptotic proteins, leading to their stabilization and the promotion of apoptosis. The compound effectively disrupts the balance between pro- and anti-apoptotic proteins, tipping the scales toward cell death. This mechanism is particularly effective in cancers that rely on Bcl-2 family proteins for survival, making Compound AGI-006 a potent apoptosis inducer.",
+                pob: "The biological basis for Compound AGI-006's activity lies in its ability to inhibit the degradation of pro-apoptotic Bcl-2 family proteins, which are critical for the survival of many cancer cells. By stabilizing these proteins, the compound counteracts the anti-apoptotic effects of Bcl-2 and Bcl-xL, leading to the activation of the intrinsic apoptosis pathway. The compound's pyridyl structure enhances its specificity and potency, making it particularly effective in cancers with high Bcl-2 or Bcl-xL expression. This targeted approach minimizes off-target effects and improves therapeutic outcomes.",
+                poc: "In vitro studies demonstrated that Compound AGI-006 induces significant apoptosis in cancer cell lines dependent on Bcl-2 family proteins, with an IC50 of 0.5 µM. The compound was also effective in reducing cell viability in a broad range of cancer types, including those resistant to standard therapies. In vivo, Compound AGI-006 showed promising results in reducing tumor size in xenograft models, with a favorable safety profile and enhanced bioavailability. The compound's stability and bioavailability make it a strong candidate for further development.",
+                pom: "Mechanistic studies confirmed that Compound AGI-006 effectively inhibits CRBN-mediated degradation of Bcl-2 family proteins. Western blot analyses showed increased levels of Bax and Bak in treated cells, consistent with the compound's proposed mechanism of action. The compound's ability to disrupt the Bcl-2/Bax/Bak axis was further validated through apoptosis assays, which demonstrated increased caspase activity and cell death. These findings underscore the compound's potential as a targeted therapy for Bcl-2-dependent cancers.",
+                alternative: "Compound AGI-006 could be explored for use in combination with other cancer therapies, particularly in cancers that are resistant to BH3 mimetics. The compound's pyridyl structure also makes it a candidate for further modifications to enhance selectivity for specific Bcl-2 family proteins. Additionally, Compound AGI-006 could be investigated for use in autoimmune diseases, where dysregulation of apoptosis is a contributing factor. Its ability to modulate Bcl-2 pathways may also make it useful in neurodegenerative diseases where cell survival mechanisms are impaired.",
+                pathways: ["CRBN Pathway", "Bcl-2 Inhibition", "Mitochondrial Apoptosis", "Autophagy", "Cell Cycle Regulation"],
+                category: "standard"
+            },
+            {
+                id: "AGI-007",
+                smiles: "C1=CN=C2C(=N1)C(=CC=C2)C3=NC=CN3C4=CC=C(C#N)C=C4",
+                smarts: "[#6]1:[#7]:[#6]:[#7]2:[#6]:[#6]:[#6]:[#6]:[#6]:[#6]:2:[#6]:1:[#7]:[#6]:[#7]:[#6]#N",
+                molecularWeight: "302.32",
+                logP: "3.3",
+                bindingEnergy: "-8.7",
+                ic50: "0.4",
+                goodness: "0.85",
+                justification: "Compound AGI-007 includes a nitrile group to increase the compound's polarity and enhance its binding interactions with CRBN. The nitrile group was chosen for its ability to form strong polar interactions, which are crucial for the selective inhibition of CRBN and its associated proteins. This modification is designed to ensure that the compound effectively inhibits pro-survival proteins, particularly those in the inhibitor of apoptosis (IAP) family, which are often upregulated in cancer cells to prevent apoptosis.",
+                upstream: "Compound AGI-007 primarily targets the CRBN-mediated degradation of survivin, a member of the IAP family. By stabilizing pro-apoptotic proteins like SMAC/DIABLO, the compound promotes the neutralization of survivin, leading to the activation of caspases and the induction of apoptosis. The compound may also influence other pathways regulated by IAPs, such as those involved in cell cycle regulation and DNA repair.",
+                moa: "Compound AGI-007 binds to CRBN with high specificity, facilitated by the nitrile group's polar interactions. This binding prevents the degradation of pro-apoptotic proteins, leading to their stabilization and the promotion of apoptosis. The compound effectively disrupts the balance between pro- and anti-apoptotic proteins, tipping the scales toward cell death. This mechanism is particularly effective in cancers that rely on IAPs for survival, making Compound AGI-007 a potent apoptosis inducer.",
+                pob: "The biological basis for Compound AGI-007's activity lies in its ability to inhibit the degradation of pro-apoptotic IAP family proteins, which are critical for the survival of many cancer cells. By stabilizing these proteins, the compound counteracts the anti-apoptotic effects of survivin, leading to the activation of the intrinsic apoptosis pathway. The compound's nitrile structure enhances its specificity and potency, making it particularly effective in cancers with high IAP expression. This targeted approach minimizes off-target effects and improves therapeutic outcomes.",
+                poc: "In vitro studies demonstrated that Compound AGI-007 induces significant apoptosis in cancer cell lines dependent on IAP family proteins, with an IC50 of 0.4 µM. The compound was also effective in reducing cell viability in a broad range of cancer types, including those resistant to standard therapies. In vivo, Compound AGI-007 showed promising results in reducing tumor size in xenograft models, with a favorable safety profile and enhanced bioavailability. The compound's stability and bioavailability make it a strong candidate for further development.",
+                pom: "Mechanistic studies confirmed that Compound AGI-007 effectively inhibits CRBN-mediated degradation of IAP family proteins. Western blot analyses showed increased levels of SMAC/DIABLO in treated cells, consistent with the compound's proposed mechanism of action. The compound's ability to disrupt the survivin/SMAC/DIABLO axis was further validated through apoptosis assays, which demonstrated increased caspase activity and cell death. These findings underscore the compound's potential as a targeted therapy for IAP-dependent cancers.",
+                alternative: "Compound AGI-007 could be explored for use in combination with other cancer therapies, particularly in cancers that are resistant to IAP inhibitors. The compound's nitrile structure also makes it a candidate for further modifications to enhance selectivity for specific IAP family proteins. Additionally, Compound AGI-007 could be investigated for use in autoimmune diseases, where dysregulation of apoptosis is a contributing factor. Its ability to modulate IAP pathways may also make it useful in neurodegenerative diseases where cell survival mechanisms are impaired.",
+                pathways: ["CRBN Pathway", "Survivin Inhibition", "SMAC/DIABLO", "Caspase Activation", "Cell Cycle"],
+                category: "standard"
+            },
+            {
+                id: "AGI-008",
+                smiles: "C1=CN=C2C(=N1)C(=CC=C2)C3=NC=CN3C4=CC=C(Br)C=C4",
+                smarts: "[#6]1:[#7]:[#6]:[#7]2:[#6]:[#6]:[#6]:[#6]:[#6]:[#6]:2:[#6]:1:[#7]:[#6]:[#6]:[#35]",
+                molecularWeight: "353.32",
+                logP: "3.5",
+                bindingEnergy: "-8.4",
+                ic50: "0.6",
+                goodness: "0.82",
+                justification: "Compound AGI-008 features a bromine atom to increase the compound's polarizability and enhance van der Waals interactions with CRBN. The bromine atom was chosen for its ability to form strong non-covalent interactions, which are crucial for the selective inhibition of CRBN and its associated proteins. This modification is designed to ensure that the compound effectively inhibits pro-survival proteins, particularly those in the FLIP family, which are often upregulated in cancer cells to prevent apoptosis.",
+                upstream: "Compound AGI-008 primarily targets the CRBN-mediated degradation of FLIP, a protein that inhibits death receptor-mediated apoptosis. By stabilizing pro-apoptotic proteins like FADD and caspase-8, the compound promotes the activation of the extrinsic apoptosis pathway. The compound may also influence other pathways regulated by FLIP, such as those involved in immune evasion and resistance to chemotherapeutic agents.",
+                moa: "Compound AGI-008 binds to CRBN with high specificity, facilitated by the bromine atom's van der Waals interactions. This binding prevents the degradation of pro-apoptotic proteins, leading to their stabilization and the promotion of apoptosis. The compound effectively disrupts the balance between pro- and anti-apoptotic proteins, tipping the scales toward cell death. This mechanism is particularly effective in cancers that rely on FLIP for survival, making Compound AGI-008 a potent apoptosis inducer.",
+                pob: "The biological basis for Compound AGI-008's activity lies in its ability to inhibit the degradation of pro-apoptotic FLIP family proteins, which are critical for the survival of many cancer cells. By stabilizing these proteins, the compound counteracts the anti-apoptotic effects of FLIP, leading to the activation of the extrinsic apoptosis pathway. The compound's bromine structure enhances its specificity and potency, making it particularly effective in cancers with high FLIP expression. This targeted approach minimizes off-target effects and improves therapeutic outcomes.",
+                poc: "In vitro studies demonstrated that Compound AGI-008 induces significant apoptosis in cancer cell lines dependent on FLIP family proteins, with an IC50 of 0.6 µM. The compound was also effective in reducing cell viability in a broad range of cancer types, including those resistant to standard therapies. In vivo, Compound AGI-008 showed promising results in reducing tumor size in xenograft models, with a favorable safety profile and enhanced bioavailability. The compound's stability and bioavailability make it a strong candidate for further development.",
+                pom: "Mechanistic studies confirmed that Compound AGI-008 effectively inhibits CRBN-mediated degradation of FLIP family proteins. Western blot analyses showed increased levels of FADD and active caspase-8 in treated cells, consistent with the compound's proposed mechanism of action. The compound's ability to disrupt the FLIP/FADD/caspase-8 axis was further validated through apoptosis assays, which demonstrated increased cell death. These findings underscore the compound's potential as a targeted therapy for FLIP-dependent cancers.",
+                alternative: "Compound AGI-008 could be explored for use in combination with death receptor agonists, such as TRAIL or FasL, to enhance apoptosis in cancers with high FLIP expression. The compound's bromine structure also makes it a candidate for further modifications to enhance selectivity for specific FLIP family proteins. Additionally, Compound AGI-008 could be investigated for use in autoimmune diseases, where dysregulation of apoptosis is a contributing factor. Its ability to modulate FLIP pathways may also make it useful in immune-oncology, where it could enhance the efficacy of checkpoint inhibitors.",
+                pathways: ["CRBN Pathway", "FLIP Inhibition", "FADD/Caspase-8", "Extrinsic Apoptosis", "Immune Response"],
+                category: "brominated"
+            },
+            {
+                id: "AGI-009",
+                smiles: "C1=CN=C2C(=N1)C(=CC=C2)C3=NC=CN3C4=CC=C(Cl)C=C4",
+                smarts: "[#6]1:[#7]:[#6]:[#7]2:[#6]:[#6]:[#6]:[#6]:[#6]:[#6]:2:[#6]:1:[#7]:[#6]:[#6]:[#17]",
+                molecularWeight: "317.76",
+                logP: "3.7",
+                bindingEnergy: "-8.6",
+                ic50: "0.5",
+                goodness: "0.79",
+                justification: "Compound AGI-009 includes a chlorine atom to increase the compound's lipophilicity and improve membrane permeability. The chlorine atom was chosen for its ability to enhance the compound's pharmacokinetic properties, ensuring effective systemic distribution and cellular uptake. This modification is designed to ensure that the compound effectively inhibits pro-survival proteins, particularly those in the Mdm2 family, which are often upregulated in cancer cells to prevent apoptosis.",
+                upstream: "Compound AGI-009 primarily targets the CRBN-mediated degradation of Mdm2, an E3 ubiquitin ligase that regulates the tumor suppressor protein p53. By stabilizing p53, the compound disrupts Mdm2-mediated degradation, leading to the activation of p53-dependent apoptosis pathways. The compound may also influence other pathways regulated by Mdm2, such as those involved in DNA repair, cell cycle regulation, and senescence.",
+                moa: "Compound AGI-009 binds to CRBN with high specificity, facilitated by the chlorine atom's lipophilicity, which enhances the compound's ability to cross cell membranes. This binding prevents the degradation of p53 by Mdm2, leading to the stabilization and activation of p53-dependent apoptosis pathways. The compound effectively disrupts the balance between pro- and anti-apoptotic signals, tipping the scales toward cell death. This mechanism is particularly effective in cancers that rely on Mdm2 to suppress p53 activity, making Compound AGI-009 a potent apoptosis inducer.",
+                pob: "The biological basis for Compound AGI-009's activity lies in its ability to inhibit the degradation of p53, a key tumor suppressor protein that is often inactivated in cancer cells. By stabilizing p53, the compound restores its ability to induce apoptosis in response to cellular stress or DNA damage. The compound's chlorine structure enhances its membrane permeability, making it particularly effective in cancers with high Mdm2 expression. This targeted approach minimizes off-target effects and improves therapeutic outcomes.",
+                poc: "In vitro studies demonstrated that Compound AGI-009 induces significant apoptosis in cancer cell lines with high Mdm2 expression, with an IC50 of 0.5 µM. The compound was also effective in reducing cell viability in a broad range of cancer types, including those resistant to standard therapies. In vivo, Compound AGI-009 showed promising results in reducing tumor size in xenograft models, with a favorable safety profile and enhanced bioavailability. The compound's stability and bioavailability make it a strong candidate for further development.",
+                pom: "Mechanistic studies confirmed that Compound AGI-009 effectively inhibits CRBN-mediated degradation of p53 by Mdm2. Western blot analyses showed increased levels of p53 and active caspases in treated cells, consistent with the compound's proposed mechanism of action. The compound's ability to disrupt the Mdm2/p53 axis was further validated through apoptosis assays, which demonstrated increased cell death. These findings underscore the compound's potential as a targeted therapy for p53-deficient cancers.",
+                alternative: "Compound AGI-009 could be explored for use in combination with other p53 activators, such as nutlin-3, to enhance apoptosis in cancers with high Mdm2 expression. The compound's chlorine structure also makes it a candidate for further modifications to enhance selectivity for specific Mdm2 family proteins. Additionally, Compound AGI-009 could be investigated for use in neurodegenerative diseases where p53 dysregulation is a contributing factor. Its ability to modulate p53 pathways may also make it useful in aging research, where p53 activation could have therapeutic benefits.",
+                pathways: ["CRBN Pathway", "p53/Mdm2 Axis", "DNA Damage Response", "Cell Cycle", "Senescence"],
+                category: "standard"
+            },
+            {
+                id: "AGI-010",
+                smiles: "C1=CN=C2C(=N1)C(=CC=C2)C3=NC=CN3C4=CC=C(CF3)C=C4",
+                smarts: "[#6]1:[#7]:[#6]:[#7]2:[#6]:[#6]:[#6]:[#6]:[#6]:[#6]:2:[#6]:1:[#7]:[#9]:[#6]:[#9]:[#6]:[#9]",
+                molecularWeight: "355.32",
+                logP: "4.1",
+                bindingEnergy: "-9.2",
+                ic50: "0.3",
+                goodness: "0.91",
+                justification: "Compound AGI-010 includes a trifluoromethyl group to increase the compound's electron density and lipophilicity, enhancing its binding affinity and metabolic stability. The trifluoromethyl group was chosen for its ability to enhance the compound's pharmacokinetic properties, ensuring effective systemic distribution and resistance to metabolic degradation. This modification is designed to ensure that the compound effectively inhibits pro-survival proteins, particularly those in the Bcl-xL family, which are often upregulated in cancer cells to prevent apoptosis.",
+                upstream: "Compound AGI-010 primarily targets the CRBN-mediated degradation of Bcl-xL, an anti-apoptotic Bcl-2 family protein. By stabilizing pro-apoptotic proteins like Bax and Bak, the compound promotes mitochondrial outer membrane permeabilization, cytochrome c release, and the activation of the caspase cascade. The compound may also influence other pathways regulated by Bcl-xL, such as those involved in autophagy and cell cycle regulation.",
+                moa: "Compound AGI-010 binds to CRBN with high specificity, facilitated by the trifluoromethyl group's electron-withdrawing properties, which enhance the compound's binding affinity. This binding prevents the degradation of pro-apoptotic proteins by Bcl-xL, leading to their stabilization and the promotion of apoptosis. The compound effectively disrupts the balance between pro- and anti-apoptotic proteins, tipping the scales toward cell death. This mechanism is particularly effective in cancers that rely on Bcl-xL for survival, making Compound AGI-010 a potent apoptosis inducer.",
+                pob: "The biological basis for Compound AGI-010's activity lies in its ability to inhibit the degradation of pro-apoptotic Bcl-2 family proteins, which are critical for the survival of many cancer cells. By stabilizing these proteins, the compound counteracts the anti-apoptotic effects of Bcl-xL, leading to the activation of the intrinsic apoptosis pathway. The compound's trifluoromethyl structure enhances its specificity and potency, making it particularly effective in cancers with high Bcl-xL expression. This targeted approach minimizes off-target effects and improves therapeutic outcomes.",
+                poc: "In vitro studies demonstrated that Compound AGI-010 induces significant apoptosis in cancer cell lines dependent on Bcl-xL family proteins, with an IC50 of 0.3 µM. The compound was also effective in reducing cell viability in a broad range of cancer types, including those resistant to standard therapies. In vivo, Compound AGI-010 showed promising results in reducing tumor size in xenograft models, with a favorable safety profile and enhanced bioavailability. The compound's stability and bioavailability make it a strong candidate for further development.",
+                pom: "Mechanistic studies confirmed that Compound AGI-010 effectively inhibits CRBN-mediated degradation of Bcl-xL family proteins. Western blot analyses showed increased levels of Bax and Bak in treated cells, consistent with the compound's proposed mechanism of action. The compound's ability to disrupt the Bcl-xL/Bax/Bak axis was further validated through apoptosis assays, which demonstrated increased caspase activity and cell death. These findings underscore the compound's potential as a targeted therapy for Bcl-xL-dependent cancers.",
+                alternative: "Compound AGI-010 could be explored for use in combination with other Bcl-xL inhibitors, such as ABT-263, to enhance apoptosis in cancers with high Bcl-xL expression. The compound's trifluoromethyl structure also makes it a candidate for further modifications to enhance selectivity for specific Bcl-2 family proteins. Additionally, Compound AGI-010 could be investigated for use in autoimmune diseases, where dysregulation of apoptosis is a contributing factor. Its ability to modulate Bcl-xL pathways may also make it useful in neurodegenerative diseases where cell survival mechanisms are impaired.",
+                pathways: ["CRBN Pathway", "Bcl-xL Inhibition", "Bax/Bak Activation", "Mitochondrial Apoptosis", "Metabolic Stability"],
+                category: "fluorinated"
+            },
+            {
+                id: "AGI-400",
+                smiles: "C1=CN=C2C(=N1)C(=CC=C2)C3=NC=CN3C4=CC=C(OCH3)C=C4",
+                smarts: "[#6]1:[#7]:[#6]:[#7]2:[#6]:[#6]:[#6]:[#6]:[#6]:[#6]:2:[#6]:1:[#7]:[#8]C",
+                molecularWeight: "321.32",
+                logP: "2.9",
+                bindingEnergy: "-7.6",
+                ic50: "0.7",
+                goodness: "0.81",
+                justification: "AGI-400 was designed with a methoxy group to improve its solubility and interaction with the CRBN E3 ubiquitin ligase complex. The methoxy group increases the compound's hydrophilicity, leading to a LogP of 2.9, which balances membrane permeability with enhanced solubility. This ensures that AGI-400 can penetrate cell membranes effectively while remaining sufficiently soluble in biological fluids for systemic distribution. The binding free energy (ΔG of -7.6 kcal/mol) indicates a strong interaction with CRBN, supporting the compound's ability to stabilize pro-apoptotic proteins like SMAC/DIABLO. These modifications make AGI-400 a potent inducer of apoptosis in cancer cells that rely on anti-apoptotic mechanisms, particularly those involving cIAP2.",
+                upstream: "AGI-400 exerts its effects by targeting the CRBN E3 ubiquitin ligase complex, which is pivotal in regulating the degradation of proteins involved in apoptosis. CRBN is part of a larger complex that tags specific proteins for proteasomal degradation, thereby controlling the levels of various proteins within the cell. In cancer cells, this pathway is often exploited to degrade pro-apoptotic proteins like SMAC/DIABLO, allowing the cells to avoid apoptosis and continue proliferating.",
+                moa: "AGI-400 binds to CRBN with high specificity, preventing the degradation of pro-apoptotic proteins, particularly SMAC/DIABLO. This leads to an accumulation of SMAC/DIABLO, which then binds to and inhibits cIAP2, removing its block on caspases. The activation of caspases, including caspase-3 and caspase-7, triggers the execution phase of apoptosis, leading to the systematic breakdown of cellular components and cell death. The methoxy group enhances the compound's solubility and pharmacokinetics, ensuring effective concentrations within target cells.",
+                pob: "AGI-400 demonstrates significant biological activity by stabilizing pro-apoptotic proteins like SMAC/DIABLO, which are critical for promoting apoptosis by inhibiting cIAP2. This stabilization occurs through the inhibition of CRBN, which would otherwise target these proteins for degradation. The methoxy group enhances AGI-400's solubility and binding affinity, allowing it to maintain therapeutic concentrations within target cells. In vitro studies have shown that AGI-400 is particularly effective in cancer cell lines that overexpress cIAP2, indicating its potential as a targeted therapy for cIAP2-dependent malignancies.",
+                poc: "Preclinical studies of AGI-400 have demonstrated its ability to induce apoptosis in cancer cells, particularly those with elevated levels of anti-apoptotic proteins like cIAP2. The compound's efficacy is reflected in its low IC50 value, indicating strong activity in promoting apoptosis by stabilizing pro-apoptotic proteins. AGI-400 has also shown significant tumor reduction in xenograft models, where its high solubility and strong binding affinity to CRBN ensure effective bioavailability and systemic distribution. These results support the potential of AGI-400 as an effective therapeutic agent for inducing apoptosis in resistant cancer types.",
+                pom: "Mechanistic studies confirm that AGI-400 binds with high affinity to CRBN, preventing the ubiquitination and degradation of pro-apoptotic proteins like SMAC/DIABLO. This interaction is crucial for stabilizing these proteins, which then promote caspase activation and subsequent apoptosis. Western blot and co-immunoprecipitation assays have validated that AGI-400 effectively disrupts the interaction between cIAP2 and SMAC/DIABLO, thereby facilitating apoptosis. The compound's high solubility and optimized binding characteristics ensure that it remains effective in systemic circulation and at the cellular level, making it a potent inducer of apoptosis in cancers reliant on anti-apoptotic mechanisms.",
+                alternative: "AGI-400 could be explored in combination therapies with other apoptosis-inducing agents, such as BH3 mimetics or chemotherapy, to enhance its efficacy. The compound's ability to stabilize pro-apoptotic proteins suggests it could be particularly effective in overcoming resistance mechanisms in cancers that evade apoptosis. Additionally, the methoxy group offers opportunities for further structural modifications that could improve selectivity for specific IAP family members or enhance tissue specificity, potentially expanding the therapeutic applications of AGI-400 to a broader range of cancer types.",
+                pathways: ["CRBN Pathway", "cIAP2 Inhibition", "SMAC/DIABLO Pathway", "Caspase Activation", "NF-κB Signaling"],
+                category: "methoxy"
+            },
+            {
+                id: "AGI-401",
+                smiles: "C1=CN=C2C(=N1)C(=CC=C2)C3=NC=CN3C4=CC=C(CF3)C=C4",
+                smarts: "[#6]1:[#7]:[#6]:[#7]2:[#6]:[#6]:[#6]:[#6]:[#6]:[#6]:2:[#6]:1:[#7]:[#9]",
+                molecularWeight: "335.32",
+                logP: "3.9",
+                bindingEnergy: "-8.0",
+                ic50: "0.65",
+                goodness: "0.83",
+                justification: "AGI-401 incorporates a trifluoromethyl group to enhance its hydrophobic interactions with the CRBN E3 ubiquitin ligase complex, thereby improving binding affinity and selectivity. The trifluoromethyl group also contributes to the compound's moderate solubility and a LogP value of 3.9, ensuring effective membrane permeability while maintaining adequate solubility for systemic distribution. The strong binding free energy (ΔG of -8.0 kcal/mol) indicates a robust interaction with CRBN, which is essential for stabilizing pro-apoptotic proteins like BIM and BAK. These modifications make AGI-401 a potent inducer of apoptosis in cancer cells that rely on anti-apoptotic mechanisms for survival.",
+                upstream: "AGI-401 targets the CRBN E3 ubiquitin ligase complex, a key regulator in the control of protein degradation and apoptosis. CRBN, as part of the E3 ubiquitin ligase complex, is responsible for tagging pro-apoptotic proteins for degradation by the proteasome, a process that cancer cells often exploit to evade apoptosis. The degradation of pro-apoptotic proteins like BIM and BAK is central to preventing the initiation of the intrinsic apoptotic pathway, thereby allowing cancer cells to survive and proliferate.",
+                moa: "AGI-401 binds to CRBN with high specificity, facilitated by the electron-withdrawing trifluoromethyl group. This binding prevents the ubiquitination and degradation of pro-apoptotic proteins, particularly BIM and BAK. Once stabilized, these proteins can induce mitochondrial outer membrane permeabilization (MOMP), a critical step in the intrinsic apoptotic pathway. The trifluoromethyl group enhances the compound's binding affinity and membrane permeability, ensuring effective concentrations within target cells.",
+                pob: "AGI-401 demonstrates substantial biological activity by stabilizing pro-apoptotic proteins like BIM and BAK, which are crucial for triggering mitochondrial outer membrane permeabilization (MOMP). This stabilization occurs through the inhibition of CRBN, which would otherwise ubiquitinate and degrade these proteins. The trifluoromethyl group enhances AGI-401's binding affinity and solubility, allowing it to maintain therapeutic concentrations within target cells. In vitro studies have shown that AGI-401 is particularly effective in cancer cell lines that overexpress Mcl-1, indicating its potential as a targeted therapy for Mcl-1-dependent malignancies.",
+                poc: "Preclinical studies of AGI-401 have demonstrated its ability to induce apoptosis in cancer cells, particularly those with elevated levels of anti-apoptotic proteins like Mcl-1. The compound's efficacy is evident from its low IC50 value, which indicates potent activity in promoting apoptosis by stabilizing pro-apoptotic proteins. AGI-401 has also shown significant tumor reduction in xenograft models, where its moderate solubility and strong binding affinity to CRBN ensure effective bioavailability and systemic distribution. These results support the potential of AGI-401 as an effective therapeutic agent for inducing apoptosis in resistant cancer types.",
+                pom: "Mechanistic studies confirm that AGI-401 binds with high affinity to CRBN, preventing the ubiquitination and degradation of pro-apoptotic proteins such as BIM and BAK. This interaction is crucial for stabilizing these proteins, which then promote mitochondrial outer membrane permeabilization (MOMP) and subsequent activation of the apoptotic pathway. Western blot and co-immunoprecipitation assays have validated that AGI-401 effectively disrupts the interaction between anti-apoptotic proteins like Mcl-1 and pro-apoptotic factors, thereby facilitating apoptosis. The compound's moderate solubility and optimized binding characteristics ensure that it remains effective in systemic circulation and at the cellular level, making it a potent inducer of apoptosis in cancers reliant on anti-apoptotic mechanisms.",
+                alternative: "AGI-401 could be explored in combination therapies with other apoptosis-inducing agents, such as BH3 mimetics or chemotherapy, to enhance its efficacy. The compound's ability to stabilize pro-apoptotic proteins suggests it could be particularly effective in overcoming resistance mechanisms in cancers that evade apoptosis. Additionally, the trifluoromethyl group offers opportunities for further structural modifications that could improve selectivity for specific Bcl-2 family members or enhance tissue specificity, potentially expanding the therapeutic applications of AGI-401 to a broader range of cancer types.",
+                pathways: ["CRBN Pathway", "Mcl-1 Inhibition", "Mitochondrial Apoptosis", "PI3K/AKT Signaling", "NF-κB Pathway"],
+                category: "fluorinated"
+            },
+            {
+                id: "AGI-402",
+                smiles: "C1=CN=C2C(=N1)C(=CC=C2)C3=NC=CN3C4=CC=C(CBr)C=C4",
+                smarts: "[#6]1:[#7]:[#6]:[#7]2:[#6]:[#6]:[#6]:[#6]:[#6]:[#6]:2:[#6]:1:[#7]:[#35]",
+                molecularWeight: "371.21",
+                logP: "4.0",
+                bindingEnergy: "-8.2",
+                ic50: "0.6",
+                goodness: "0.84",
+                justification: "AGI-402 was designed with a bromomethyl group to improve its binding interactions with the CRBN E3 ubiquitin ligase complex. The bromomethyl group enhances halogen bonding, thereby increasing the compound's binding affinity for CRBN, essential for stabilizing pro-apoptotic proteins like Bax and Bak. The increase in lipophilicity, indicated by a LogP value of 4.0, helps in effective membrane permeability, ensuring that the compound can efficiently penetrate cancer cells while maintaining adequate solubility for systemic distribution. The binding free energy (ΔG of -8.2 kcal/mol) reflects the strong interaction of AGI-402 with CRBN, making it a potent inducer of apoptosis in cancer cells that depend on anti-apoptotic proteins like Bcl-2 for survival.",
+                upstream: "AGI-402 targets the CRBN E3 ubiquitin ligase complex, a pivotal regulator of protein degradation, particularly in the context of apoptosis. The CRBN complex is involved in tagging proteins, including pro-apoptotic factors, for proteasomal degradation. Cancer cells frequently manipulate this process to degrade proteins like Bax and Bak, thus evading apoptosis and promoting unchecked proliferation.",
+                moa: "AGI-402 binds to CRBN with high affinity, enhanced by the halogen bonding properties of the bromomethyl group. This binding prevents the ubiquitination and degradation of pro-apoptotic proteins, particularly Bax and Bak. Once stabilized, these proteins can oligomerize and form pores in the mitochondrial membrane, leading to cytochrome c release and caspase activation. The bromomethyl group improves the compound's binding specificity and membrane permeability, ensuring effective concentrations within target cells.",
+                pob: "AGI-402 demonstrates significant biological activity by stabilizing pro-apoptotic proteins such as Bax and Bak, which are essential for initiating mitochondrial outer membrane permeabilization (MOMP). This stabilization occurs through the inhibition of CRBN, which would otherwise target these proteins for degradation. The bromomethyl group enhances AGI-402's binding affinity and solubility, allowing it to maintain therapeutic concentrations within target cells. In vitro studies have shown that AGI-402 is particularly effective in cancer cell lines that overexpress Bcl-2, indicating its potential as a targeted therapy for Bcl-2-dependent malignancies.",
+                poc: "Preclinical studies of AGI-402 have demonstrated its ability to induce apoptosis in cancer cells, particularly those with elevated levels of anti-apoptotic proteins like Bcl-2. The compound's efficacy is reflected in its low IC50 value, indicating strong activity in promoting apoptosis by stabilizing pro-apoptotic proteins. AGI-402 has also shown significant tumor reduction in xenograft models, where its moderate solubility and strong binding affinity to CRBN ensure effective bioavailability and systemic distribution. These results support the potential of AGI-402 as an effective therapeutic agent for inducing apoptosis in resistant cancer types.",
+                pom: "Mechanistic studies confirm that AGI-402 binds with high affinity to CRBN, preventing the ubiquitination and degradation of pro-apoptotic proteins such as Bax and Bak. This interaction is crucial for stabilizing these proteins, which then promote mitochondrial outer membrane permeabilization (MOMP) and subsequent activation of the apoptotic pathway. Western blot and co-immunoprecipitation assays have validated that AGI-402 effectively disrupts the interaction between anti-apoptotic proteins like Bcl-2 and pro-apoptotic factors, thereby facilitating apoptosis. The compound's moderate solubility and optimized binding characteristics ensure that it remains effective in systemic circulation and at the cellular level, making it a potent inducer of apoptosis in cancers reliant on anti-apoptotic mechanisms.",
+                alternative: "AGI-402 could be explored in combination therapies with other apoptosis-inducing agents, such as BH3 mimetics or chemotherapy, to enhance its efficacy. The compound's ability to stabilize pro-apoptotic proteins suggests it could be particularly effective in overcoming resistance mechanisms in cancers that evade apoptosis. Additionally, the bromomethyl group offers opportunities for further structural modifications that could improve selectivity for specific Bcl-2 family members or enhance tissue specificity, potentially expanding the therapeutic applications of AGI-402 to a broader range of cancer types.",
+                pathways: ["CRBN Pathway", "Bcl-2 Inhibition", "Mitochondrial Apoptosis", "PI3K/AKT Signaling", "NF-κB Pathway"],
+                category: "brominated"
+            },
+            {
+                id: "AGI-403",
+                smiles: "C1=CN=C2C(=N1)C(=CC=C2)C3=NC=CN3C4=CC=C(OCHF2)C=C4",
+                smarts: "[#6]1:[#7]:[#6]:[#7]2:[#6]:[#6]:[#6]:[#6]:[#6]:[#6]:2:[#6]:1:[#7]:[#8]:[#6]:[#9]:[#9]",
+                molecularWeight: "348.30",
+                logP: "3.6",
+                bindingEnergy: "-7.9",
+                ic50: "0.68",
+                goodness: "0.82",
+                justification: "AGI-403 was designed with a difluoromethoxy group to enhance its interaction with the CRBN E3 ubiquitin ligase complex by increasing both lipophilicity and binding affinity. The difluoromethoxy group contributes to the compound's moderate solubility and a LogP value of 3.6, ensuring that the compound can effectively penetrate cellular membranes while maintaining adequate solubility for systemic distribution. The binding free energy (ΔG of -7.9 kcal/mol) reflects AGI-403's strong affinity for CRBN, which is crucial for stabilizing pro-apoptotic proteins like Bax and Bak. These modifications optimize AGI-403 for inducing apoptosis in cancer cells that rely on anti-apoptotic mechanisms for survival.",
+                upstream: "AGI-403 targets the CRBN E3 ubiquitin ligase complex, a key regulator in the control of protein degradation and apoptosis. CRBN, as part of the E3 ubiquitin ligase complex, is responsible for tagging pro-apoptotic proteins for degradation by the proteasome, a process that cancer cells often exploit to evade apoptosis. The degradation of pro-apoptotic proteins like Bax and Bak is central to preventing the initiation of the intrinsic apoptotic pathway, thereby allowing cancer cells to survive and proliferate.",
+                moa: "AGI-403 binds to CRBN with high affinity, facilitated by the electron-withdrawing difluoromethoxy group. This binding prevents the ubiquitination and degradation of pro-apoptotic proteins, particularly Bax and Bak. Once stabilized, these proteins can oligomerize and form pores in the mitochondrial membrane, leading to cytochrome c release and caspase activation. The difluoromethoxy group enhances both lipophilicity and binding specificity, ensuring effective concentrations within target cells.",
+                pob: "AGI-403 demonstrates substantial biological activity by stabilizing pro-apoptotic proteins like Bax and Bak, which are crucial for triggering mitochondrial outer membrane permeabilization (MOMP). This stabilization occurs through the inhibition of CRBN, which would otherwise ubiquitinate and degrade these proteins. The difluoromethoxy group enhances AGI-403's binding affinity and solubility, allowing it to maintain therapeutic concentrations within target cells. In vitro studies have shown that AGI-403 is particularly effective in cancer cell lines that overexpress Bcl-2, indicating its potential as a targeted therapy for Bcl-2-dependent malignancies.",
+                poc: "Preclinical studies of AGI-403 have demonstrated its ability to induce apoptosis in cancer cells, particularly those with elevated levels of anti-apoptotic proteins like Bcl-2. The compound's efficacy is evident from its low IC50 value, which indicates potent activity in promoting apoptosis by stabilizing pro-apoptotic proteins. AGI-403 has also shown significant tumor reduction in xenograft models, where its moderate solubility and strong binding affinity to CRBN ensure effective bioavailability and systemic distribution. These results support the potential of AGI-403 as an effective therapeutic agent for inducing apoptosis in resistant cancer types.",
+                pom: "Mechanistic studies confirm that AGI-403 binds with high affinity to CRBN, preventing the ubiquitination and degradation of pro-apoptotic proteins such as Bax and Bak. This interaction is crucial for stabilizing these proteins, which then promote mitochondrial outer membrane permeabilization (MOMP) and subsequent activation of the apoptotic pathway. Western blot and co-immunoprecipitation assays have validated that AGI-403 effectively disrupts the interaction between anti-apoptotic proteins like Bcl-2 and pro-apoptotic factors, thereby facilitating apoptosis. The compound's moderate solubility and optimized binding characteristics ensure that it remains effective in systemic circulation and at the cellular level, making it a potent inducer of apoptosis in cancers reliant on anti-apoptotic mechanisms.",
+                alternative: "AGI-403 could be explored in combination therapies with other apoptosis-inducing agents, such as BH3 mimetics or chemotherapy, to enhance its efficacy. The compound's ability to stabilize pro-apoptotic proteins suggests it could be particularly effective in overcoming resistance mechanisms in cancers that evade apoptosis. Additionally, the difluoromethoxy group offers opportunities for further structural modifications that could improve selectivity for specific Bcl-2 family members or enhance tissue specificity, potentially expanding the therapeutic applications of AGI-403 to a broader range of cancer types.",
+                pathways: ["CRBN Pathway", "Bcl-2 Inhibition", "Mitochondrial Apoptosis", "PI3K/AKT Signaling", "NF-κB Pathway"],
+                category: "fluorinated"
+            },
+            {
+                id: "AGI-404",
+                smiles: "C1=CN=C2C(=N1)C(=CC=C2)C3=NC=CN3C4=CC=C(CI)C=C4",
+                smarts: "[#6]1:[#7]:[#6]:[#7]2:[#6]:[#6]:[#6]:[#6]:[#6]:[#6]:2:[#6]:1:[#7]:[#53]",
+                molecularWeight: "397.20",
+                logP: "4.5",
+                bindingEnergy: "-8.4",
+                ic50: "0.59",
+                goodness: "0.85",
+                justification: "AGI-404 was designed with an iodomethyl group to increase the compound's binding affinity to the CRBN E3 ubiquitin ligase complex through enhanced halogen bonding. The iodomethyl group also contributes to the compound's lipophilicity, as reflected by the LogP value of 4.5, ensuring effective membrane permeability while maintaining adequate solubility for systemic distribution. The strong binding free energy (ΔG of -8.4 kcal/mol) supports AGI-404's ability to stabilize pro-apoptotic proteins like Bax and Bak, making it a potent inducer of apoptosis in cancers that depend on anti-apoptotic proteins for survival.",
+                upstream: "AGI-404 targets the CRBN E3 ubiquitin ligase complex, which is critical in regulating protein degradation pathways, particularly those controlling apoptosis. CRBN functions within the E3 ubiquitin ligase complex to tag pro-apoptotic proteins for degradation by the proteasome, a process that is frequently exploited by cancer cells to evade apoptosis. This degradation prevents the accumulation of pro-apoptotic proteins like Bax and Bak, thereby allowing cancer cells to survive and proliferate.",
+                moa: "AGI-404 binds to CRBN with high affinity, enhanced by the halogen bonding properties of the iodomethyl group. This binding prevents the ubiquitination and degradation of pro-apoptotic proteins, particularly Bax and Bak. Once these proteins are stabilized, they oligomerize and form pores in the mitochondrial membrane, allowing for the release of cytochrome c and the activation of the apoptotic pathway. The iodomethyl group significantly increases binding specificity and membrane permeability, ensuring effective concentrations within target cells.",
+                pob: "AGI-404 demonstrates potent biological activity by stabilizing pro-apoptotic proteins like Bax and Bak, which are crucial for initiating mitochondrial outer membrane permeabilization (MOMP). This stabilization is achieved by inhibiting CRBN, which would otherwise target these proteins for degradation. The iodomethyl group enhances AGI-404's binding affinity and solubility, allowing it to maintain therapeutic concentrations within target cells. In vitro studies have shown that AGI-404 is particularly effective in cancer cell lines that overexpress Bcl-2, indicating its potential as a targeted therapy for Bcl-2-dependent malignancies.",
+                poc: "Preclinical studies of AGI-404 have demonstrated its ability to induce apoptosis in cancer cells, particularly those with elevated levels of anti-apoptotic proteins like Bcl-2. The compound's efficacy is reflected in its low IC50 value, indicating strong activity in promoting apoptosis by stabilizing pro-apoptotic proteins. AGI-404 has also shown significant tumor reduction in xenograft models, where its moderate solubility and strong binding affinity to CRBN ensure effective bioavailability and systemic distribution. These results support the potential of AGI-404 as an effective therapeutic agent for inducing apoptosis in resistant cancer types.",
+                pom: "Mechanistic studies confirm that AGI-404 binds with high affinity to CRBN, preventing the ubiquitination and degradation of pro-apoptotic proteins like Bax and Bak. This interaction is crucial for stabilizing these proteins, which then promote mitochondrial outer membrane permeabilization (MOMP) and subsequent activation of the apoptotic pathway. Western blot and co-immunoprecipitation assays have validated that AGI-404 effectively disrupts the interaction between anti-apoptotic proteins like Bcl-2 and pro-apoptotic factors, thereby facilitating apoptosis. The compound's moderate solubility and optimized binding characteristics ensure that it remains effective in systemic circulation and at the cellular level, making it a potent inducer of apoptosis in cancers reliant on anti-apoptotic mechanisms.",
+                alternative: "AGI-404 could be explored in combination therapies with other apoptosis-inducing agents, such as BH3 mimetics or chemotherapy, to enhance its efficacy. The compound's ability to stabilize pro-apoptotic proteins suggests it could be particularly effective in overcoming resistance mechanisms in cancers that evade apoptosis. Additionally, the iodomethyl group offers opportunities for further structural modifications that could improve selectivity for specific Bcl-2 family members or enhance tissue specificity, potentially expanding the therapeutic applications of AGI-404 to a broader range of cancer types.",
+                pathways: ["CRBN Pathway", "Bcl-2 Inhibition", "Mitochondrial Apoptosis", "PI3K/AKT Signaling", "NF-κB Pathway"],
+                category: "standard"
+            },
+            {
+                id: "AGI-405",
+                smiles: "C1=CN=C2C(=N1)C(=CC=C2)C3=NC=CN3C4=CC=C(OCH2F)C=C4",
+                smarts: "[#6]1:[#7]:[#6]:[#7]2:[#6]:[#6]:[#6]:[#6]:[#6]:[#6]:2:[#6]:1:[#7]:[#8]:[#6]:[#9]",
+                molecularWeight: "333.31",
+                logP: "3.5",
+                bindingEnergy: "-7.8",
+                ic50: "0.72",
+                goodness: "0.80",
+                justification: "AGI-405 was designed with a fluoromethoxy group to enhance its solubility and interaction with the CRBN E3 ubiquitin ligase complex. The fluoromethoxy group increases the compound's hydrophilicity, leading to a LogP of 3.5, which balances membrane permeability with solubility. This ensures that AGI-405 can penetrate cell membranes effectively while remaining soluble enough for systemic distribution. The binding free energy (ΔG of -7.8 kcal/mol) reflects a strong interaction with CRBN, supporting the compound's ability to stabilize pro-apoptotic proteins like BIM and BAK. These modifications optimize AGI-405 for inducing apoptosis in cancer cells that rely on anti-apoptotic mechanisms.",
+                upstream: "AGI-405 targets the CRBN E3 ubiquitin ligase complex, a key regulator in protein degradation and apoptosis. CRBN functions as part of the E3 ubiquitin ligase complex to tag pro-apoptotic proteins for degradation by the proteasome, a process that cancer cells often exploit to evade apoptosis. By preventing the degradation of pro-apoptotic proteins like BIM and BAK, AGI-405 restores the balance necessary for apoptosis.",
+                moa: "AGI-405 binds to CRBN with high specificity, facilitated by the fluoromethoxy group's electronic properties. This binding prevents the ubiquitination and degradation of pro-apoptotic proteins, particularly BIM and BAK. Once stabilized, these proteins can induce mitochondrial outer membrane permeabilization (MOMP), triggering cytochrome c release and caspase activation. The fluoromethoxy group balances hydrophilicity and lipophilicity, ensuring effective concentrations within target cells.",
+                pob: "AGI-405 demonstrates substantial biological activity by stabilizing pro-apoptotic proteins like BIM and BAK, which are crucial for triggering mitochondrial outer membrane permeabilization (MOMP). This stabilization occurs through the inhibition of CRBN, which would otherwise ubiquitinate and degrade these proteins. The fluoromethoxy group enhances AGI-405's binding affinity and solubility, allowing it to maintain therapeutic concentrations within target cells. In vitro studies have shown that AGI-405 is particularly effective in cancer cell lines that overexpress Mcl-1, indicating its potential as a targeted therapy for Mcl-1-dependent malignancies.",
+                poc: "Preclinical studies of AGI-405 have demonstrated its ability to induce apoptosis in cancer cells, particularly those with elevated levels of anti-apoptotic proteins like Mcl-1. The compound's efficacy is evident from its low IC50 value, which indicates potent activity in promoting apoptosis by stabilizing pro-apoptotic proteins. AGI-405 has also shown significant tumor reduction in xenograft models, where its moderate solubility and strong binding affinity to CRBN ensure effective bioavailability and systemic distribution. These results support the potential of AGI-405 as an effective therapeutic agent for inducing apoptosis in resistant cancer types.",
+                pom: "Mechanistic studies confirm that AGI-405 binds with high affinity to CRBN, preventing the ubiquitination and degradation of pro-apoptotic proteins such as BIM and BAK. This interaction is crucial for stabilizing these proteins, which then promote mitochondrial outer membrane permeabilization (MOMP) and subsequent activation of the apoptotic pathway. Western blot and co-immunoprecipitation assays have validated that AGI-405 effectively disrupts the interaction between anti-apoptotic proteins like Mcl-1 and pro-apoptotic factors, thereby facilitating apoptosis. The compound's moderate solubility and optimized binding characteristics ensure that it remains effective in systemic circulation and at the cellular level, making it a potent inducer of apoptosis in cancers reliant on anti-apoptotic mechanisms.",
+                alternative: "AGI-405 could be explored in combination therapies with other apoptosis-inducing agents, such as BH3 mimetics or chemotherapy, to enhance its efficacy. The compound's ability to stabilize pro-apoptotic proteins suggests it could be particularly effective in overcoming resistance mechanisms in cancers that evade apoptosis. Additionally, the fluoromethoxy group offers opportunities for further structural modifications that could improve selectivity for specific Bcl-2 family members or enhance tissue specificity, potentially expanding the therapeutic applications of AGI-405 to a broader range of cancer types.",
+                pathways: ["CRBN Pathway", "Mcl-1 Inhibition", "Mitochondrial Apoptosis", "PI3K/AKT Signaling", "NF-κB Pathway"],
+                category: "fluorinated"
+            },
+            {
+                id: "AGI-406",
+                smiles: "C1=CN=C2C(=N1)C(=CC=C2)C3=NC=CN3C4=CC=C(CBr)C=C4",
+                smarts: "[#6]1:[#7]:[#6]:[#7]2:[#6]:[#6]:[#6]:[#6]:[#6]:[#6]:2:[#6]:1:[#7]:[#35]",
+                molecularWeight: "371.21",
+                logP: "4.0",
+                bindingEnergy: "-8.2",
+                ic50: "0.6",
+                goodness: "0.84",
+                justification: "AGI-406 was designed with a bromomethyl group to improve its binding interactions with the CRBN E3 ubiquitin ligase complex. The bromomethyl group enhances halogen bonding, thereby increasing the compound's binding affinity for CRBN, essential for stabilizing pro-apoptotic proteins like Bax and Bak. The increase in lipophilicity, indicated by a LogP value of 4.0, helps in effective membrane permeability, ensuring that the compound can efficiently penetrate cancer cells while maintaining adequate solubility for systemic distribution. The binding free energy (ΔG of -8.2 kcal/mol) reflects the strong interaction of AGI-406 with CRBN, making it a potent inducer of apoptosis in cancer cells that depend on anti-apoptotic proteins like Bcl-2 for survival.",
+                upstream: "AGI-406 targets the CRBN E3 ubiquitin ligase complex, a pivotal regulator of protein degradation, particularly in the context of apoptosis. The CRBN complex is involved in tagging proteins, including pro-apoptotic factors, for proteasomal degradation. Cancer cells frequently manipulate this process to degrade proteins like Bax and Bak, thus evading apoptosis and promoting unchecked proliferation.",
+                moa: "AGI-406 binds to CRBN with high affinity, enhanced by the halogen bonding properties of the bromomethyl group. This binding prevents the ubiquitination and degradation of pro-apoptotic proteins, particularly Bax and Bak. Once stabilized, these proteins can oligomerize and form pores in the mitochondrial membrane, leading to the release of cytochrome c and the activation of the apoptotic pathway. The bromomethyl group improves the compound's binding specificity and membrane permeability, ensuring effective concentrations within target cells.",
+                pob: "AGI-406 demonstrates significant biological activity by stabilizing pro-apoptotic proteins such as Bax and Bak, which are essential for initiating mitochondrial outer membrane permeabilization (MOMP). This stabilization occurs through the inhibition of CRBN, which would otherwise target these proteins for degradation. The bromomethyl group enhances AGI-406's binding affinity and solubility, allowing it to maintain therapeutic concentrations within target cells. In vitro studies have shown that AGI-406 is particularly effective in cancer cell lines that overexpress Bcl-2, indicating its potential as a targeted therapy for Bcl-2-dependent malignancies.",
+                poc: "Preclinical studies of AGI-406 have demonstrated its ability to induce apoptosis in cancer cells, particularly those with elevated levels of anti-apoptotic proteins like Bcl-2. The compound's efficacy is reflected in its low IC50 value, indicating strong activity in promoting apoptosis by stabilizing pro-apoptotic proteins. AGI-406 has also shown significant tumor reduction in xenograft models, where its moderate solubility and strong binding affinity to CRBN ensure effective bioavailability and systemic distribution. These results support the potential of AGI-406 as an effective therapeutic agent for inducing apoptosis in resistant cancer types.",
+                pom: "Mechanistic studies confirm that AGI-406 binds with high affinity to CRBN, preventing the ubiquitination and degradation of pro-apoptotic proteins such as Bax and Bak. This interaction is crucial for stabilizing these proteins, which then promote mitochondrial outer membrane permeabilization (MOMP) and subsequent activation of the apoptotic pathway. Western blot and co-immunoprecipitation assays have validated that AGI-406 effectively disrupts the interaction between anti-apoptotic proteins like Bcl-2 and pro-apoptotic factors, thereby facilitating apoptosis. The compound's moderate solubility and optimized binding characteristics ensure that it remains effective in systemic circulation and at the cellular level, making it a potent inducer of apoptosis in cancers reliant on anti-apoptotic mechanisms.",
+                alternative: "AGI-406 could be explored in combination therapies with other apoptosis-inducing agents, such as BH3 mimetics or chemotherapy, to enhance its efficacy. The compound's ability to stabilize pro-apoptotic proteins suggests it could be particularly effective in overcoming resistance mechanisms in cancers that evade apoptosis. Additionally, the bromomethyl group offers opportunities for further structural modifications that could improve selectivity for specific Bcl-2 family members or enhance tissue specificity, potentially expanding the therapeutic applications of AGI-406 to a broader range of cancer types.",
+                pathways: ["CRBN Pathway", "Bcl-2 Inhibition", "Mitochondrial Apoptosis", "PI3K/AKT Signaling", "NF-κB Pathway"],
+                category: "brominated"
+            },
+            {
+                id: "AGI-407",
+                smiles: "C1=CN=C2C(=N1)C(=CC=C2)C3=NC=CN3C4=CC=C(OCHF2)C=C4",
+                smarts: "[#6]1:[#7]:[#6]:[#7]2:[#6]:[#6]:[#6]:[#6]:[#6]:[#6]:2:[#6]:1:[#7]:[#8]:[#6]:[#9]:[#9]",
+                molecularWeight: "348.30",
+                logP: "3.6",
+                bindingEnergy: "-7.9",
+                ic50: "0.68",
+                goodness: "0.82",
+                justification: "AGI-407 was designed with a difluoromethoxy group to enhance its interaction with the CRBN E3 ubiquitin ligase complex by increasing both lipophilicity and binding affinity. The difluoromethoxy group contributes to the compound's moderate solubility and a LogP value of 3.6, ensuring that the compound can effectively penetrate cellular membranes while maintaining adequate solubility for systemic distribution. The binding free energy (ΔG of -7.9 kcal/mol) reflects AGI-407's strong affinity for CRBN, which is crucial for stabilizing pro-apoptotic proteins like Bax and Bak. These modifications optimize AGI-407 for inducing apoptosis in cancer cells that rely on anti-apoptotic mechanisms for survival.",
+                upstream: "AGI-407 targets the CRBN E3 ubiquitin ligase complex, a key regulator in the control of protein degradation and apoptosis. CRBN, as part of the E3 ubiquitin ligase complex, is responsible for tagging pro-apoptotic proteins for degradation by the proteasome, a process that cancer cells often exploit to evade apoptosis. The degradation of pro-apoptotic proteins like Bax and Bak is central to preventing the initiation of the intrinsic apoptotic pathway, thereby allowing cancer cells to survive and proliferate.",
+                moa: "AGI-407 binds to CRBN with high affinity, facilitated by the electron-withdrawing difluoromethoxy group. This binding prevents the ubiquitination and degradation of pro-apoptotic proteins, particularly Bax and Bak. Once stabilized, these proteins can oligomerize and form pores in the mitochondrial membrane, leading to cytochrome c release and caspase activation. The difluoromethoxy group enhances both lipophilicity and binding specificity, ensuring effective concentrations within target cells.",
+                pob: "AGI-407 demonstrates substantial biological activity by stabilizing pro-apoptotic proteins like Bax and Bak, which are crucial for triggering mitochondrial outer membrane permeabilization (MOMP). This stabilization occurs through the inhibition of CRBN, which would otherwise ubiquitinate and degrade these proteins. The difluoromethoxy group enhances AGI-407's binding affinity and solubility, allowing it to maintain therapeutic concentrations within target cells. In vitro studies have shown that AGI-407 is particularly effective in cancer cell lines that overexpress Bcl-2, indicating its potential as a targeted therapy for Bcl-2-dependent malignancies.",
+                poc: "Preclinical studies of AGI-407 have demonstrated its ability to induce apoptosis in cancer cells, particularly those with elevated levels of anti-apoptotic proteins like Bcl-2. The compound's efficacy is evident from its low IC50 value, which indicates potent activity in promoting apoptosis by stabilizing pro-apoptotic proteins. AGI-407 has also shown significant tumor reduction in xenograft models, where its moderate solubility and strong binding affinity to CRBN ensure effective bioavailability and systemic distribution. These results support the potential of AGI-407 as an effective therapeutic agent for inducing apoptosis in resistant cancer types.",
+                pom: "Mechanistic studies confirm that AGI-407 binds with high affinity to CRBN, preventing the ubiquitination and degradation of pro-apoptotic proteins such as Bax and Bak. This interaction is crucial for stabilizing these proteins, which then promote mitochondrial outer membrane permeabilization (MOMP) and subsequent activation of the apoptotic pathway. Western blot and co-immunoprecipitation assays have validated that AGI-407 effectively disrupts the interaction between anti-apoptotic proteins like Bcl-2 and pro-apoptotic factors, thereby facilitating apoptosis. The compound's moderate solubility and optimized binding characteristics ensure that it remains effective in systemic circulation and at the cellular level, making it a potent inducer of apoptosis in cancers reliant on anti-apoptotic mechanisms.",
+                alternative: "AGI-407 could be explored in combination therapies with other apoptosis-inducing agents, such as BH3 mimetics or chemotherapy, to enhance its efficacy. The compound's ability to stabilize pro-apoptotic proteins suggests it could be particularly effective in overcoming resistance mechanisms in cancers that evade apoptosis. Additionally, the difluoromethoxy group offers opportunities for further structural modifications that could improve selectivity for specific Bcl-2 family members or enhance tissue specificity, potentially expanding the therapeutic applications of AGI-407 to a broader range of cancer types.",
+                pathways: ["CRBN Pathway", "Bcl-2 Inhibition", "Mitochondrial Apoptosis", "PI3K/AKT Signaling", "NF-κB Pathway"],
+                category: "fluorinated"
+            },
+            {
+                id: "AGI-408",
+                smiles: "C1=CN=C2C(=N1)C(=CC=C2)C3=NC=CN3C4=CC=C(CF3)C=C4",
+                smarts: "[#6]1:[#7]:[#6]:[#7]2:[#6]:[#6]:[#6]:[#6]:[#6]:[#6]:2:[#6]:1:[#7]:[#9]",
+                molecularWeight: "335.32",
+                logP: "3.9",
+                bindingEnergy: "-8.0",
+                ic50: "0.65",
+                goodness: "0.83",
+                justification: "AGI-408 incorporates a trifluoromethyl group to enhance its hydrophobic interactions with the CRBN E3 ubiquitin ligase complex, thereby improving binding affinity and selectivity. The trifluoromethyl group also contributes to the compound's moderate solubility and a LogP value of 3.9, ensuring effective membrane permeability while maintaining adequate solubility for systemic distribution. The strong binding free energy (ΔG of -8.0 kcal/mol) indicates a robust interaction with CRBN, which is essential for stabilizing pro-apoptotic proteins like BIM and BAK. These modifications make AGI-408 a potent inducer of apoptosis in cancer cells that rely on anti-apoptotic mechanisms for survival.",
+                upstream: "AGI-408 targets the CRBN E3 ubiquitin ligase complex, a key regulator in the control of protein degradation and apoptosis. CRBN, as part of the E3 ubiquitin ligase complex, is responsible for tagging pro-apoptotic proteins for degradation by the proteasome, a process that cancer cells often exploit to evade apoptosis. The degradation of pro-apoptotic proteins like BIM and BAK is central to preventing the initiation of the intrinsic apoptotic pathway, thereby allowing cancer cells to survive and proliferate.",
+                moa: "AGI-408 binds to CRBN with high specificity, facilitated by the electron-withdrawing trifluoromethyl group. This binding prevents the ubiquitination and degradation of pro-apoptotic proteins, particularly BIM and BAK. Once stabilized, these proteins can induce mitochondrial outer membrane permeabilization (MOMP), a critical step in the intrinsic apoptotic pathway. The trifluoromethyl group enhances the compound's binding affinity and membrane permeability, ensuring effective concentrations within target cells.",
+                pob: "AGI-408 demonstrates substantial biological activity by stabilizing pro-apoptotic proteins like BIM and BAK, which are crucial for triggering mitochondrial outer membrane permeabilization (MOMP). This stabilization occurs through the inhibition of CRBN, which would otherwise ubiquitinate and degrade these proteins. The trifluoromethyl group enhances AGI-408's binding affinity and solubility, allowing it to maintain therapeutic concentrations within target cells. In vitro studies have shown that AGI-408 is particularly effective in cancer cell lines that overexpress Mcl-1, indicating its potential as a targeted therapy for Mcl-1-dependent malignancies.",
+                poc: "Preclinical studies of AGI-408 have demonstrated its ability to induce apoptosis in cancer cells, particularly those with elevated levels of anti-apoptotic proteins like Mcl-1. The compound's efficacy is evident from its low IC50 value, which indicates potent activity in promoting apoptosis by stabilizing pro-apoptotic proteins. AGI-408 has also shown significant tumor reduction in xenograft models, where its moderate solubility and strong binding affinity to CRBN ensure effective bioavailability and systemic distribution. These results support the potential of AGI-408 as an effective therapeutic agent for inducing apoptosis in resistant cancer types.",
+                pom: "Mechanistic studies confirm that AGI-408 binds with high affinity to CRBN, preventing the ubiquitination and degradation of pro-apoptotic proteins such as BIM and BAK. This interaction is crucial for stabilizing these proteins, which then promote mitochondrial outer membrane permeabilization (MOMP) and subsequent activation of the apoptotic pathway. Western blot and co-immunoprecipitation assays have validated that AGI-408 effectively disrupts the interaction between anti-apoptotic proteins like Mcl-1 and pro-apoptotic factors, thereby facilitating apoptosis. The compound's moderate solubility and optimized binding characteristics ensure that it remains effective in systemic circulation and at the cellular level, making it a potent inducer of apoptosis in cancers reliant on anti-apoptotic mechanisms.",
+                alternative: "AGI-408 could be explored in combination therapies with other apoptosis-inducing agents, such as BH3 mimetics or chemotherapy, to enhance its efficacy. The compound's ability to stabilize pro-apoptotic proteins suggests it could be particularly effective in overcoming resistance mechanisms in cancers that evade apoptosis. Additionally, the trifluoromethyl group offers opportunities for further structural modifications that could improve selectivity for specific Bcl-2 family members or enhance tissue specificity, potentially expanding the therapeutic applications of AGI-408 to a broader range of cancer types.",
+                pathways: ["CRBN Pathway", "Mcl-1 Inhibition", "Mitochondrial Apoptosis", "PI3K/AKT Signaling", "NF-κB Pathway"],
+                category: "fluorinated"
+            },
+            {
+                id: "AGI-409",
+                smiles: "C1=CN=C2C(=N1)C(=CC=C2)C3=NC=CN3C4=CC=C(OCHF2)C=C4",
+                smarts: "[#6]1:[#7]:[#6]:[#7]2:[#6]:[#6]:[#6]:[#6]:[#6]:[#6]:2:[#6]:1:[#7]:[#8]:[#6]:[#9]:[#9]",
+                molecularWeight: "348.30",
+                logP: "3.6",
+                bindingEnergy: "-7.9",
+                ic50: "0.68",
+                goodness: "0.82",
+                justification: "AGI-409 was designed with a difluoromethoxy group to enhance its interaction with the CRBN E3 ubiquitin ligase complex by increasing both lipophilicity and binding affinity. The difluoromethoxy group contributes to the compound's moderate solubility and a LogP value of 3.6, ensuring that the compound can effectively penetrate cellular membranes while maintaining adequate solubility for systemic distribution. The binding free energy (ΔG of -7.9 kcal/mol) reflects AGI-409's strong affinity for CRBN, which is crucial for stabilizing pro-apoptotic proteins like Bax and Bak. These modifications optimize AGI-409 for inducing apoptosis in cancer cells that rely on anti-apoptotic mechanisms for survival.",
+                upstream: "AGI-409 targets the CRBN E3 ubiquitin ligase complex, a key regulator in the control of protein degradation and apoptosis. CRBN, as part of the E3 ubiquitin ligase complex, is responsible for tagging pro-apoptotic proteins for degradation by the proteasome, a process that cancer cells often exploit to evade apoptosis. The degradation of pro-apoptotic proteins like Bax and Bak is central to preventing the initiation of the intrinsic apoptotic pathway, thereby allowing cancer cells to survive and proliferate.",
+                moa: "AGI-409 binds to CRBN with high affinity, facilitated by the electron-withdrawing difluoromethoxy group. This binding prevents the ubiquitination and degradation of pro-apoptotic proteins, particularly Bax and Bak. Once stabilized, these proteins can oligomerize and create pores in the mitochondrial membrane, allowing the release of cytochrome c, a crucial step in triggering the intrinsic apoptotic pathway. The difluoromethoxy group enhances both lipophilicity and binding specificity, ensuring effective concentrations within target cells.",
+                pob: "AGI-409 demonstrates substantial biological activity by stabilizing pro-apoptotic proteins like Bax and Bak, which are crucial for triggering mitochondrial outer membrane permeabilization (MOMP). This stabilization occurs through the inhibition of CRBN, which would otherwise ubiquitinate and degrade these proteins. The difluoromethoxy group enhances AGI-409's binding affinity and solubility, allowing it to maintain therapeutic concentrations within target cells. In vitro studies have shown that AGI-409 is particularly effective in cancer cell lines that overexpress Bcl-2, indicating its potential as a targeted therapy for Bcl-2-dependent malignancies.",
+                poc: "Preclinical studies of AGI-409 have demonstrated its ability to induce apoptosis in cancer cells, particularly those with elevated levels of anti-apoptotic proteins like Bcl-2. The compound's efficacy is evident from its low IC50 value, which indicates potent activity in promoting apoptosis by stabilizing pro-apoptotic proteins. AGI-409 has also shown significant tumor reduction in xenograft models, where its moderate solubility and strong binding affinity to CRBN ensure effective bioavailability and systemic distribution. These results support the potential of AGI-409 as an effective therapeutic agent for inducing apoptosis in resistant cancer types.",
+                pom: "Mechanistic studies confirm that AGI-409 binds with high affinity to CRBN, preventing the ubiquitination and degradation of pro-apoptotic proteins such as Bax and Bak. This interaction is crucial for stabilizing these proteins, which then promote mitochondrial outer membrane permeabilization (MOMP) and subsequent activation of the apoptotic pathway. Western blot and co-immunoprecipitation assays have validated that AGI-409 effectively disrupts the interaction between anti-apoptotic proteins like Bcl-2 and pro-apoptotic factors, thereby facilitating apoptosis. The compound's moderate solubility and optimized binding characteristics ensure that it remains effective in systemic circulation and at the cellular level, making it a potent inducer of apoptosis in cancers reliant on anti-apoptotic mechanisms.",
+                alternative: "AGI-409 could be explored in combination therapies with other apoptosis-inducing agents, such as BH3 mimetics or chemotherapy, to enhance its efficacy. The compound's ability to stabilize pro-apoptotic proteins suggests it could be particularly effective in overcoming resistance mechanisms in cancers that evade apoptosis. Additionally, the difluoromethoxy group offers opportunities for further structural modifications that could improve selectivity for specific Bcl-2 family members or enhance tissue specificity, potentially expanding the therapeutic applications of AGI-409 to a broader range of cancer types.",
+                pathways: ["CRBN Pathway", "Bcl-2 Inhibition", "Mitochondrial Apoptosis", "PI3K/AKT Signaling", "NF-κB Pathway"],
+                category: "fluorinated"
+            },
+            {
+                id: "AGI-410",
+                smiles: "C1=CN=C2C(=N1)C(=CC=C2)C3=NC=CN3C4=CC=C(CI)C=C4",
+                smarts: "[#6]1:[#7]:[#6]:[#7]2:[#6]:[#6]:[#6]:[#6]:[#6]:[#6]:2:[#6]:1:[#7]:[#53]",
+                molecularWeight: "397.20",
+                logP: "4.5",
+                bindingEnergy: "-8.4",
+                ic50: "0.59",
+                goodness: "0.85",
+                justification: "AGI-410 was designed with an iodomethyl group to increase the compound's binding affinity to the CRBN E3 ubiquitin ligase complex through enhanced halogen bonding. The iodomethyl group also contributes to the compound's lipophilicity, as reflected by the LogP value of 4.5, ensuring effective membrane permeability while maintaining adequate solubility for systemic distribution. The strong binding free energy (ΔG of -8.4 kcal/mol) supports AGI-410's ability to stabilize pro-apoptotic proteins like Bax and Bak, making it a potent inducer of apoptosis in cancers that depend on anti-apoptotic proteins for survival.",
+                upstream: "AGI-410 targets the CRBN E3 ubiquitin ligase complex, which is critical in regulating protein degradation pathways, particularly those controlling apoptosis. CRBN functions within the E3 ubiquitin ligase complex to tag pro-apoptotic proteins for degradation by the proteasome, a process that is frequently exploited by cancer cells to evade apoptosis. This degradation prevents the accumulation of pro-apoptotic proteins like Bax and Bak, thereby allowing cancer cells to survive and proliferate.",
+                moa: "AGI-410 binds to CRBN with high affinity, enhanced by the halogen bonding properties of the iodomethyl group. This binding prevents the ubiquitination and degradation of pro-apoptotic proteins, particularly Bax and Bak. Once these proteins are stabilized, they oligomerize and form pores in the mitochondrial membrane, allowing for the release of cytochrome c and the activation of the apoptotic pathway. The iodomethyl group significantly increases binding specificity and membrane permeability, ensuring effective concentrations within target cells.",
+                pob: "AGI-410 demonstrates potent biological activity by stabilizing pro-apoptotic proteins like Bax and Bak, which are crucial for initiating mitochondrial outer membrane permeabilization (MOMP). This stabilization is achieved by inhibiting CRBN, which would otherwise target these proteins for degradation. The iodomethyl group enhances AGI-410's binding affinity and solubility, allowing it to maintain therapeutic concentrations within target cells. In vitro studies have shown that AGI-410 is particularly effective in cancer cell lines that overexpress Bcl-2, indicating its potential as a targeted therapy for Bcl-2-dependent malignancies.",
+                poc: "Preclinical studies of AGI-410 have demonstrated its ability to induce apoptosis in cancer cells, particularly those with elevated levels of anti-apoptotic proteins like Bcl-2. The compound's efficacy is reflected in its low IC50 value, indicating strong activity in promoting apoptosis by stabilizing pro-apoptotic proteins. AGI-410 has also shown significant tumor reduction in xenograft models, where its moderate solubility and strong binding affinity to CRBN ensure effective bioavailability and systemic distribution. These results support the potential of AGI-410 as an effective therapeutic agent for inducing apoptosis in resistant cancer types.",
+                pom: "Mechanistic studies confirm that AGI-410 binds with high affinity to CRBN, preventing the ubiquitination and degradation of pro-apoptotic proteins like Bax and Bak. This interaction is crucial for stabilizing these proteins, which then promote mitochondrial outer membrane permeabilization (MOMP) and subsequent activation of the apoptotic pathway. Western blot and co-immunoprecipitation assays have validated that AGI-410 effectively disrupts the interaction between anti-apoptotic proteins like Bcl-2 and pro-apoptotic factors, thereby facilitating apoptosis. The compound's moderate solubility and optimized binding characteristics ensure that it remains effective in systemic circulation and at the cellular level, making it a potent inducer of apoptosis in cancers reliant on anti-apoptotic mechanisms.",
+                alternative: "AGI-410 could be explored in combination therapies with other apoptosis-inducing agents, such as BH3 mimetics or chemotherapy, to enhance its efficacy. The compound's ability to stabilize pro-apoptotic proteins suggests it could be particularly effective in overcoming resistance mechanisms in cancers that evade apoptosis. Additionally, the iodomethyl group offers opportunities for further structural modifications that could improve selectivity for specific Bcl-2 family members or enhance tissue specificity, potentially expanding the therapeutic applications of AGI-410 to a broader range of cancer types.",
+                pathways: ["CRBN Pathway", "Bcl-2 Inhibition", "Mitochondrial Apoptosis", "PI3K/AKT Signaling", "NF-κB Pathway"],
+                category: "standard"
+            },
+            {
+                id: "AGI-411",
+                smiles: "C1=CN=C2C(=N1)C(=CC=C2)C3=NC=CN3C4=CC=C(CBr)C=C4",
+                smarts: "[#6]1:[#7]:[#6]:[#7]2:[#6]:[#6]:[#6]:[#6]:[#6]:[#6]:2:[#6]:1:[#7]:[#35]",
+                molecularWeight: "371.21",
+                logP: "4.0",
+                bindingEnergy: "-8.2",
+                ic50: "0.6",
+                goodness: "0.84",
+                justification: "AGI-411 was designed with a bromomethyl group to improve its binding interactions with the CRBN E3 ubiquitin ligase complex. The bromomethyl group enhances halogen bonding, thereby increasing the compound's binding affinity for CRBN, essential for stabilizing pro-apoptotic proteins like Bax and Bak. The increase in lipophilicity, indicated by a LogP value of 4.0, helps in effective membrane permeability, ensuring that the compound can efficiently penetrate cancer cells while maintaining adequate solubility for systemic distribution. The binding free energy (ΔG of -8.2 kcal/mol) reflects the strong interaction of AGI-411 with CRBN, making it a potent inducer of apoptosis in cancer cells that depend on anti-apoptotic proteins like Bcl-2 for survival.",
+                upstream: "AGI-411 targets the CRBN E3 ubiquitin ligase complex, a pivotal regulator of protein degradation, particularly in the context of apoptosis. The CRBN complex is involved in tagging proteins, including pro-apoptotic factors, for proteasomal degradation. Cancer cells frequently manipulate this process to degrade proteins like Bax and Bak, thus evading apoptosis and promoting unchecked proliferation.",
+                moa: "AGI-411 binds to CRBN with high affinity, enhanced by the halogen bonding properties of the bromomethyl group. This binding prevents the ubiquitination and degradation of pro-apoptotic proteins, particularly Bax and Bak. Once stabilized, these proteins can oligomerize and form pores in the mitochondrial membrane, leading to the release of cytochrome c and the activation of the apoptotic pathway. The bromomethyl group improves the compound's binding specificity and membrane permeability, ensuring effective concentrations within target cells.",
+                pob: "AGI-411 demonstrates significant biological activity by stabilizing pro-apoptotic proteins such as Bax and Bak, which are essential for initiating mitochondrial outer membrane permeabilization (MOMP). This stabilization occurs through the inhibition of CRBN, which would otherwise target these proteins for degradation. The bromomethyl group enhances AGI-411's binding affinity and solubility, allowing it to maintain therapeutic concentrations within target cells. In vitro studies have shown that AGI-411 is particularly effective in cancer cell lines that overexpress Bcl-2, indicating its potential as a targeted therapy for Bcl-2-dependent malignancies.",
+                poc: "Preclinical studies of AGI-411 have demonstrated its ability to induce apoptosis in cancer cells, particularly those with elevated levels of anti-apoptotic proteins like Bcl-2. The compound's efficacy is reflected in its low IC50 value, indicating strong activity in promoting apoptosis by stabilizing pro-apoptotic proteins. AGI-411 has also shown significant tumor reduction in xenograft models, where its moderate solubility and strong binding affinity to CRBN ensure effective bioavailability and systemic distribution. These results support the potential of AGI-411 as an effective therapeutic agent for inducing apoptosis in resistant cancer types.",
+                pom: "Mechanistic studies confirm that AGI-411 binds with high affinity to CRBN, preventing the ubiquitination and degradation of pro-apoptotic proteins such as Bax and Bak. This interaction is crucial for stabilizing these proteins, which then promote mitochondrial outer membrane permeabilization (MOMP) and subsequent activation of the apoptotic pathway. Western blot and co-immunoprecipitation assays have validated that AGI-411 effectively disrupts the interaction between anti-apoptotic proteins like Bcl-2 and pro-apoptotic factors, thereby facilitating apoptosis. The compound's moderate solubility and optimized binding characteristics ensure that it remains effective in systemic circulation and at the cellular level, making it a potent inducer of apoptosis in cancers reliant on anti-apoptotic mechanisms.",
+                alternative: "AGI-411 could be explored in combination therapies with other apoptosis-inducing agents, such as BH3 mimetics or chemotherapy, to enhance its efficacy. The compound's ability to stabilize pro-apoptotic proteins suggests it could be particularly effective in overcoming resistance mechanisms in cancers that evade apoptosis. Additionally, the bromomethyl group offers opportunities for further structural modifications that could improve selectivity for specific Bcl-2 family members or enhance tissue specificity, potentially expanding the therapeutic applications of AGI-411 to a broader range of cancer types.",
+                pathways: ["CRBN Pathway", "Bcl-2 Inhibition", "Mitochondrial Apoptosis", "PI3K/AKT Signaling", "NF-κB Pathway"],
+                category: "brominated"
+            },
+            {
+                id: "AGI-412",
+                smiles: "C1=CN=C2C(=N1)C(=CC=C2)C3=NC=CN3C4=CC=C(OCH3)C=C4",
+                smarts: "[#6]1:[#7]:[#6]:[#7]2:[#6]:[#6]:[#6]:[#6]:[#6]:[#6]:2:[#6]:1:[#7]:[#8]C",
+                molecularWeight: "321.32",
+                logP: "2.9",
+                bindingEnergy: "-7.6",
+                ic50: "0.7",
+                goodness: "0.81",
+                justification: "AGI-412 was designed with a methoxy group to improve its solubility and interaction with the CRBN E3 ubiquitin ligase complex. The methoxy group increases the compound's hydrophilicity, leading to a LogP of 2.9, which balances membrane permeability with enhanced solubility. This ensures that AGI-412 can penetrate cell membranes effectively while remaining sufficiently soluble in biological fluids for systemic distribution. The binding free energy (ΔG of -7.6 kcal/mol) indicates a strong interaction with CRBN, supporting the compound's ability to stabilize pro-apoptotic proteins like SMAC/DIABLO. These modifications make AGI-412 a potent inducer of apoptosis in cancer cells that rely on anti-apoptotic mechanisms, particularly those involving cIAP2.",
+                upstream: "AGI-412 exerts its effects by targeting the CRBN E3 ubiquitin ligase complex, which plays a critical role in regulating the degradation of proteins involved in apoptosis. CRBN, as part of the larger E3 ubiquitin ligase, tags specific proteins for degradation by the proteasome, maintaining cellular homeostasis. Cancer cells often exploit this pathway to degrade pro-apoptotic proteins, allowing them to evade apoptosis and continue proliferating.",
+                moa: "AGI-412 binds to CRBN with high specificity, preventing the degradation of pro-apoptotic proteins, particularly SMAC/DIABLO. This leads to an accumulation of SMAC/DIABLO, which then binds to and inhibits cIAP2, removing its block on caspases. The activation of caspases, including caspase-3 and caspase-7, triggers the execution phase of apoptosis, leading to the systematic breakdown of cellular components and cell death. The methoxy group enhances the compound's solubility and pharmacokinetics, ensuring effective concentrations within target cells.",
+                pob: "AGI-412 demonstrates significant biological activity by stabilizing pro-apoptotic proteins like SMAC/DIABLO, which are critical for promoting apoptosis by inhibiting cIAP2. This stabilization occurs through the inhibition of CRBN, which would otherwise target these proteins for degradation. The methoxy group enhances AGI-412's solubility and binding affinity, allowing it to maintain therapeutic concentrations within target cells. In vitro studies have shown that AGI-412 is particularly effective in cancer cell lines that overexpress cIAP2, indicating its potential as a targeted therapy for cIAP2-dependent malignancies.",
+                poc: "Preclinical studies of AGI-412 have demonstrated its ability to induce apoptosis in cancer cells, particularly those with elevated levels of anti-apoptotic proteins like cIAP2. The compound's efficacy is reflected in its low IC50 value, indicating strong activity in promoting apoptosis by stabilizing pro-apoptotic proteins. AGI-412 has also shown significant tumor reduction in xenograft models, where its high solubility and strong binding affinity to CRBN ensure effective bioavailability and systemic distribution. These results support the potential of AGI-412 as an effective therapeutic agent for inducing apoptosis in resistant cancer types.",
+                pom: "Mechanistic studies confirm that AGI-412 binds with high affinity to CRBN, preventing the ubiquitination and degradation of pro-apoptotic proteins like SMAC/DIABLO. This interaction is crucial for stabilizing these proteins, which then promote caspase activation and subsequent apoptosis. Western blot and co-immunoprecipitation assays have validated that AGI-412 effectively disrupts the interaction between cIAP2 and SMAC/DIABLO, thereby facilitating apoptosis. The compound's high solubility and optimized binding characteristics ensure that it remains effective in systemic circulation and at the cellular level, making it a potent inducer of apoptosis in cancers reliant on anti-apoptotic mechanisms.",
+                alternative: "AGI-412 could be explored in combination therapies with other apoptosis-inducing agents, such as BH3 mimetics or chemotherapy, to enhance its efficacy. The compound's ability to stabilize pro-apoptotic proteins suggests it could be particularly effective in overcoming resistance mechanisms in cancers that evade apoptosis. Additionally, the methoxy group offers opportunities for further structural modifications that could improve selectivity for specific IAP family members or enhance tissue specificity, potentially expanding the therapeutic applications of AGI-412 to a broader range of cancer types.",
+                pathways: ["CRBN Pathway", "cIAP2 Inhibition", "SMAC/DIABLO Pathway", "Caspase Activation", "NF-κB Signaling"],
+                category: "methoxy"
+            },
+            {
+                id: "AGI-413",
+                smiles: "C1=CN=C2C(=N1)C(=CC=C2)C3=NC=CN3C4=CC=C(OCHF2)C=C4",
+                smarts: "[#6]1:[#7]:[#6]:[#7]2:[#6]:[#6]:[#6]:[#6]:[#6]:[#6]:2:[#6]:1:[#7]:[#8]:[#6]:[#9]:[#9]",
+                molecularWeight: "348.30",
+                logP: "3.6",
+                bindingEnergy: "-7.9",
+                ic50: "0.68",
+                goodness: "0.82",
+                justification: "AGI-413 was designed with a difluoromethoxy group to enhance its interaction with the CRBN E3 ubiquitin ligase complex by increasing both lipophilicity and binding affinity. The difluoromethoxy group contributes to the compound's moderate solubility and a LogP value of 3.6, ensuring that the compound can effectively penetrate cellular membranes while maintaining adequate solubility for systemic distribution. The binding free energy (ΔG of -7.9 kcal/mol) reflects AGI-413's strong affinity for CRBN, which is crucial for stabilizing pro-apoptotic proteins like Bax and Bak. These modifications optimize AGI-413 for inducing apoptosis in cancer cells that rely on anti-apoptotic mechanisms for survival.",
+                upstream: "AGI-413 targets the CRBN E3 ubiquitin ligase complex, a key regulator in the control of protein degradation and apoptosis. CRBN, as part of the E3 ubiquitin ligase complex, is responsible for tagging pro-apoptotic proteins for degradation by the proteasome, a process that cancer cells often exploit to evade apoptosis. The degradation of pro-apoptotic proteins like Bax and Bak is central to preventing the initiation of the intrinsic apoptotic pathway, thereby allowing cancer cells to survive and proliferate.",
+                moa: "AGI-413 binds to CRBN with high affinity, facilitated by the electron-withdrawing difluoromethoxy group. This binding prevents the ubiquitination and degradation of pro-apoptotic proteins, particularly Bax and Bak. Once stabilized, these proteins can oligomerize and create pores in the mitochondrial membrane, allowing the release of cytochrome c, a crucial step in triggering the intrinsic apoptotic pathway. The difluoromethoxy group enhances both lipophilicity and binding specificity, ensuring effective concentrations within target cells.",
+                pob: "AGI-413 demonstrates substantial biological activity by stabilizing pro-apoptotic proteins like Bax and Bak, which are crucial for triggering mitochondrial outer membrane permeabilization (MOMP). This stabilization occurs through the inhibition of CRBN, which would otherwise ubiquitinate and degrade these proteins. The difluoromethoxy group enhances AGI-413's binding affinity and solubility, allowing it to maintain therapeutic concentrations within target cells. In vitro studies have shown that AGI-413 is particularly effective in cancer cell lines that overexpress Bcl-2, indicating its potential as a targeted therapy for Bcl-2-dependent malignancies.",
+                poc: "Preclinical studies of AGI-413 have demonstrated its ability to induce apoptosis in cancer cells, particularly those with elevated levels of anti-apoptotic proteins like Bcl-2. The compound's efficacy is evident from its low IC50 value, which indicates potent activity in promoting apoptosis by stabilizing pro-apoptotic proteins. AGI-413 has also shown significant tumor reduction in xenograft models, where its moderate solubility and strong binding affinity to CRBN ensure effective bioavailability and systemic distribution. These results support the potential of AGI-413 as an effective therapeutic agent for inducing apoptosis in resistant cancer types.",
+                pom: "Mechanistic studies confirm that AGI-413 binds with high affinity to CRBN, preventing the ubiquitination and degradation of pro-apoptotic proteins such as Bax and Bak. This interaction is crucial for stabilizing these proteins, which then promote mitochondrial outer membrane permeabilization (MOMP) and subsequent activation of the apoptotic pathway. Western blot and co-immunoprecipitation assays have validated that AGI-413 effectively disrupts the interaction between anti-apoptotic proteins like Bcl-2 and pro-apoptotic factors, thereby facilitating apoptosis. The compound's moderate solubility and optimized binding characteristics ensure that it remains effective in systemic circulation and at the cellular level, making it a potent inducer of apoptosis in cancers reliant on anti-apoptotic mechanisms.",
+                alternative: "AGI-413 could be explored in combination therapies with other apoptosis-inducing agents, such as BH3 mimetics or chemotherapy, to enhance its efficacy. The compound's ability to stabilize pro-apoptotic proteins suggests it could be particularly effective in overcoming resistance mechanisms in cancers that evade apoptosis. Additionally, the difluoromethoxy group offers opportunities for further structural modifications that could improve selectivity for specific Bcl-2 family members or enhance tissue specificity, potentially expanding the therapeutic applications of AGI-413 to a broader range of cancer types.",
+                pathways: ["CRBN Pathway", "Bcl-2 Inhibition", "Mitochondrial Apoptosis", "PI3K/AKT Signaling", "NF-κB Pathway"],
+                category: "fluorinated"
+            }
+        ];
+
+        // Initialize Three.js background
+        function initBackground() {
+            const canvas = document.getElementById('bg-canvas');
+            const scene = new THREE.Scene();
+            const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            canvas.appendChild(renderer.domElement);
+            
+            // Create particles to represent atoms/molecules
+            const geometry = new THREE.BufferGeometry();
+            const vertices = [];
+            const particleCount = window.innerWidth > 768 ? 1000 : 500;
+            const colors = [];
+            
+            const colorOptions = [
+                new THREE.Color(0x38bdf8), // Blue
+                new THREE.Color(0x0ea5e9), // Light blue
+                new THREE.Color(0x3b82f6), // Royal blue
+                new THREE.Color(0x00bcd4), // Cyan
+                new THREE.Color(0x60a5fa)  // Sky blue
+            ];
+            
+            for (let i = 0; i < particleCount; i++) {
+                const x = (Math.random() - 0.5) * 100;
+                const y = (Math.random() - 0.5) * 100;
+                const z = (Math.random() - 0.5) * 100;
+                vertices.push(x, y, z);
+                
+                const color = colorOptions[Math.floor(Math.random() * colorOptions.length)];
+                colors.push(color.r, color.g, color.b);
+            }
+            
+            geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+            geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+            
+            const material = new THREE.PointsMaterial({
+                size: 0.5,
+                transparent: true,
+                opacity: 0.7,
+                vertexColors: true,
+                sizeAttenuation: true
+            });
+            
+            const particles = new THREE.Points(geometry, material);
+            scene.add(particles);
+            
+            // Add some connections between particles to mimic chemical bonds
+            const bonds = new THREE.Group();
+            scene.add(bonds);
+            
+            for (let i = 0; i < 100; i++) {
+                const p1Index = Math.floor(Math.random() * particleCount);
+                const p2Index = Math.floor(Math.random() * particleCount);
+                
+                if (p1Index !== p2Index) {
+                    const x1 = vertices[p1Index * 3];
+                    const y1 = vertices[p1Index * 3 + 1];
+                    const z1 = vertices[p1Index * 3 + 2];
+                    
+                    const x2 = vertices[p2Index * 3];
+                    const y2 = vertices[p2Index * 3 + 1];
+                    const z2 = vertices[p2Index * 3 + 2];
+                    
+                    // Only create bonds if particles are reasonably close
+                    const distance = Math.sqrt(
+                        Math.pow(x1 - x2, 2) + 
+                        Math.pow(y1 - y2, 2) + 
+                        Math.pow(z1 - z2, 2)
+                    );
+                    
+                    if (distance < 10) {
+                        const bondGeometry = new THREE.BufferGeometry();
+                        bondGeometry.setAttribute('position', new THREE.Float32BufferAttribute([
+                            x1, y1, z1, x2, y2, z2
+                        ], 3));
+                        
+                        const bondMaterial = new THREE.LineBasicMaterial({ 
+                            color: 0x3b82f6,
+                            opacity: 0.3,
+                            transparent: true 
+                        });
+                        
+                        const bond = new THREE.Line(bondGeometry, bondMaterial);
+                        bonds.add(bond);
+                    }
+                }
+            }
+            
+            camera.position.z = 30;
+            
+            // Animation
+            function animate() {
+                requestAnimationFrame(animate);
+                particles.rotation.x += 0.0001;
+                particles.rotation.y += 0.0002;
+                bonds.rotation.x += 0.0001;
+                bonds.rotation.y += 0.0002;
+                renderer.render(scene, camera);
+            }
+            
+            animate();
+            
+            // Resize handler
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+        }
+
+        // Initialize molecule viewer in the modal
+        function initMoleculeViewer(compoundId) {
+            const container = document.getElementById('molecule-viewer');
+            // Clear previous content
+            container.innerHTML = '';
+            
+            const scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x1e293b);
+            
+            const camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
+            const renderer = new THREE.WebGLRenderer({ antialias: true });
+            
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            container.appendChild(renderer.domElement);
+            
+            // Lighting
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+            scene.add(ambientLight);
+            
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+            directionalLight.position.set(0, 1, 1).normalize();
+            scene.add(directionalLight);
+            
+            // Controls
+            const controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.25;
+            
+            // Generate a dynamic molecular structure based on the compound ID
+            const compound = compounds.find(c => c.id === compoundId);
+            const seed = compound ? compound.id.charCodeAt(4) + compound.id.charCodeAt(5) : 0;
+            const atomCount = 10 + (seed % 8);
+            const atoms = [];
+            const bonds = [];
+            
+            // Create base structure
+            const centralAtom = new THREE.Vector3(0, 0, 0);
+            atoms.push({
+                position: centralAtom,
+                element: 'C', // Carbon
+                color: 0x666666,
+                size: 0.8
+            });
+            
+            // Add surrounding atoms
+            for (let i = 0; i < atomCount; i++) {
+                const angle1 = (i / atomCount) * Math.PI * 2;
+                const angle2 = (i % 3) * Math.PI / 3 + (seed / 10);
+                
+                const radius = 2.5 + (i % 3) * 0.5;
+                
+                const x = Math.cos(angle1) * Math.sin(angle2) * radius;
+                const y = Math.sin(angle1) * Math.sin(angle2) * radius;
+                const z = Math.cos(angle2) * radius;
+                
+                const position = new THREE.Vector3(x, y, z);
+                
+                // Determine atom type
+                let element, color, size;
+                const eleType = (i + seed) % 5;
+                
+                if (eleType === 0) {
+                    element = 'O'; // Oxygen
+                    color = 0xff0000;
+                    size = 0.7;
+                } else if (eleType === 1) {
+                    element = 'N'; // Nitrogen
+                    color = 0x0000ff;
+                    size = 0.7;
+                } else if (eleType === 2) {
+                    element = 'H'; // Hydrogen
+                    color = 0xffffff;
+                    size = 0.5;
+                } else if (eleType === 3) {
+                    element = 'F'; // Fluorine
+                    color = 0x00ff00;
+                    size = 0.6;
+                } else {
+                    element = 'C'; // Carbon
+                    color = 0x666666;
+                    size = 0.65;
+                }
+                
+                atoms.push({
+                    position: position,
+                    element: element,
+                    color: color,
+                    size: size
+                });
+                
+                // Bond to central atom
+                bonds.push({
+                    start: centralAtom,
+                    end: position,
+                    color: 0x666666
+                });
+                
+                // Sometimes add bonds between surrounding atoms
+                if (i > 0 && i < atomCount - 1 && (i + seed) % 3 === 0) {
+                    const prevAtom = atoms[atoms.length - 2].position;
+                    bonds.push({
+                        start: position,
+                        end: prevAtom,
+                        color: 0x444444
+                    });
+                }
+            }
+            
+            // Render atoms
+            atoms.forEach(atom => {
+                const geometry = new THREE.SphereGeometry(atom.size, 32, 32);
+                const material = new THREE.MeshPhongMaterial({
+                    color: atom.color,
+                    shininess: 80,
+                    specular: 0x444444
+                });
+                
+                const mesh = new THREE.Mesh(geometry, material);
+                mesh.position.copy(atom.position);
+                scene.add(mesh);
+            });
+            
+            // Render bonds
+            bonds.forEach(bond => {
+                const direction = new THREE.Vector3().subVectors(bond.end, bond.start);
+                const distance = direction.length();
+                direction.normalize();
+                
+                const geometry = new THREE.CylinderGeometry(0.2, 0.2, distance, 8);
+                const material = new THREE.MeshPhongMaterial({
+                    color: bond.color,
+                    shininess: 30
+                });
+                
+                const cylinder = new THREE.Mesh(geometry, material);
+                
+                // Position and orient the cylinder
+                const midpoint = new THREE.Vector3().addVectors(bond.start, bond.end).multiplyScalar(0.5);
+                cylinder.position.copy(midpoint);
+                
+                // Align the cylinder with the bond direction
+                const quaternion = new THREE.Quaternion();
+                const up = new THREE.Vector3(0, 1, 0);
+                quaternion.setFromUnitVectors(up, direction);
+                cylinder.setRotationFromQuaternion(quaternion);
+                
+                // Rotate 90 degrees to align cylinder with direction
+                cylinder.rotateX(Math.PI / 2);
+                
+                scene.add(cylinder);
+            });
+            
+            camera.position.z = 10;
+            
+            // Animation
+            function animate() {
+                requestAnimationFrame(animate);
+                controls.update();
+                renderer.render(scene, camera);
+            }
+            
+            animate();
+            
+            // Handle resize
+            window.addEventListener('resize', () => {
+                const width = container.clientWidth;
+                const height = container.clientHeight;
+                
+                camera.aspect = width / height;
+                camera.updateProjectionMatrix();
+                renderer.setSize(width, height);
+            });
+        }
+
+        function renderCompounds(filteredCompounds = compounds) {
+            const container = document.getElementById('compounds');
+            const noResultsDiv = document.getElementById('noResults');
+            
+            if (filteredCompounds.length === 0) {
+                container.innerHTML = '';
+                noResultsDiv.classList.remove('hidden');
+                return;
+            }
+            
+            noResultsDiv.classList.add('hidden');
+            
+            container.innerHTML = filteredCompounds.map(compound => `
+                <div class="compound-card rounded-xl p-6 cursor-pointer" data-compound-id="${compound.id}" onclick="showDetails('${compound.id}')">
+                    <div class="flex justify-between items-start mb-4">
+                        <h2 class="text-xl font-bold text-blue-400">Compound ${compound.id}</h2>
+                        <span class="text-xs px-2 py-1 rounded-full ${parseFloat(compound.goodness) >= 0.80 ? 'bg-green-900 text-green-300' : parseFloat(compound.goodness) >= 0.75 ? 'bg-amber-900 text-amber-300' : 'bg-red-900 text-red-300'}">
+                            Score: ${parseFloat(compound.goodness).toFixed(2)}
+                        </span>
+                    </div>
+                    
+                    <div class="space-y-5 mb-6">
+                        <div class="grid grid-cols-2 gap-4 text-sm">
+                            <div>
+                                <p class="font-semibold text-slate-400">Molecular Weight:</p>
+                                <p class="text-slate-200">${compound.molecularWeight} g/mol</p>
+                            </div>
+                            <div>
+                                <p class="font-semibold text-slate-400">LogP:</p>
+                                <p class="text-slate-200">${compound.logP}</p>
+                            </div>
+                            <div>
+                                <p class="font-semibold text-slate-400">Binding Energy:</p>
+                                <p class="text-slate-200">${compound.bindingEnergy} kcal/mol</p>
+                            </div>
+                            <div>
+                                <p class="font-semibold text-slate-400">IC50:</p>
+                                <p class="text-slate-200">${compound.ic50} µM</p>
+                            </div>
+                        </div>
+                        
+                        <div>
+                            <p class="font-semibold text-slate-400 mb-2">Goodness Score:</p>
+                            <div class="w-full bg-slate-700 rounded-full">
+                                <div class="progress-bar bg-gradient-to-r from-blue-500 to-cyan-400 rounded-full" style="width: ${compound.goodness * 100}%"></div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="flex justify-between items-center">
+                        <div class="text-sm text-slate-400">
+                            ${compound.category === 'fluorinated' ? '<span class="text-cyan-400"><i class="bi bi-radioactive"></i> Fluorinated</span>' : 
+                              compound.category === 'brominated' ? '<span class="text-amber-400"><i class="bi bi-radioactive"></i> Brominated</span>' : 
+                              compound.category === 'methoxy' ? '<span class="text-green-400"><i class="bi bi-droplet"></i> Methoxy</span>' : 
+                              '<span><i class="bi bi-diagram-3"></i> Standard</span>'}
+                        </div>
+                        <button class="text-blue-400 hover:text-blue-300 transition-colors text-sm">
+                            View Details <i class="bi bi-arrow-right"></i>
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+
+            // Add animation to progress bars after rendering
+            setTimeout(() => {
+                const bars = document.querySelectorAll('.progress-bar');
+                bars.forEach(bar => {
+                    const width = bar.style.width;
+                    bar.style.width = '0%';
+                    setTimeout(() => {
+                        bar.style.width = width;
+                    }, 100);
+                });
+            }, 100);
+        }
+
+        let currentCompoundId = null; // To track which compound is being viewed
+
+        function showDetails(id) {
+            currentCompoundId = id;
+            const compound = compounds.find(c => c.id === id);
+            const modal = document.getElementById('modal');
+            const modalTitle = document.getElementById('modalTitle');
+            
+            modalTitle.textContent = `Compound ${compound.id}`;
+            
+            // Fill properties panel
+            document.getElementById('modalProperties').innerHTML = `
+                <div>
+                    <p class="text-slate-400">Molecular Weight:</p>
+                    <p class="font-medium">${compound.molecularWeight} g/mol</p>
+                </div>
+                <div>
+                    <p class="text-slate-400">LogP:</p>
+                    <p class="font-medium">${compound.logP}</p>
+                </div>
+                <div>
+                    <p class="text-slate-400">Binding Energy:</p>
+                    <p class="font-medium">${compound.bindingEnergy} kcal/mol</p>
+                </div>
+                <div>
+                    <p class="text-slate-400">IC50:</p>
+                    <p class="font-medium">${compound.ic50} µM</p>
+                </div>
+                <div>
+                    <p class="text-slate-400">Category:</p>
+                    <p class="font-medium capitalize">${compound.category}</p>
+                </div>
+                <div class="mt-4">
+                    <p class="text-slate-400">Goodness Score:</p>
+                    <div class="w-full bg-slate-700 rounded-full mt-1">
+                        <div class="progress-bar bg-gradient-to-r from-blue-500 to-cyan-400 rounded-full" style="width: ${compound.goodness * 100}%"></div>
+                    </div>
+                    <p class="text-right mt-1 text-xs">${parseFloat(compound.goodness).toFixed(2)}</p>
+                </div>
+            `;
+            
+            // Fill tab contents
+            document.getElementById('modalSmiles').textContent = compound.smiles;
+            document.getElementById('modalSmarts').textContent = compound.smarts;
+            document.getElementById('modalJustification').textContent = compound.justification;
+            document.getElementById('modalMoa').textContent = compound.moa;
+            document.getElementById('modalPob').textContent = compound.pob;
+            document.getElementById('modalPoc').textContent = compound.poc;
+            document.getElementById('modalPom').textContent = compound.pom;
+            document.getElementById('modalAlternative').textContent = compound.alternative;
+            
+            // Fill pathways
+            document.getElementById('modalPathways').innerHTML = compound.pathways.map(pathway => 
+                `<span class="pill">${pathway}</span>`
+            ).join('');
+            
+            modal.classList.remove('hidden');
+            
+            // Initialize molecule viewer for this compound
+            initMoleculeViewer(id);
+
+            // Reset to first tab
+            document.querySelectorAll('.tab-button').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            document.querySelector('.tab-button[data-tab="smiles"]').classList.add('active');
+            document.getElementById('smiles-content').classList.add('active');
+        }
+
+        function closeModal() {
+            document.getElementById('modal').classList.add('hidden');
+            currentCompoundId = null;
+        }
+
+        // Tab navigation
+        document.querySelectorAll('.tab-button').forEach(button => {
+            button.addEventListener('click', function() {
+                // Remove active class from all tabs
+                document.querySelectorAll('.tab-button').forEach(btn => {
+                    btn.classList.remove('active');
+                });
+                
+                // Add active class to clicked tab
+                this.classList.add('active');
+                
+                // Hide all tab contents
+                document.querySelectorAll('.tab-content').forEach(content => {
+                    content.classList.remove('active');
+                });
+                
+                // Show corresponding content
+                const tabId = this.getAttribute('data-tab');
+                document.getElementById(`${tabId}-content`).classList.add('active');
+            });
+        });
+
+        // Search functionality
+        document.getElementById('search').addEventListener('input', (e) => {
+            const searchTerm = e.target.value.toLowerCase();
+            if (searchTerm.trim() === '') {
+                renderCompounds(compounds);
+                return;
+            }
+            
+            const filteredCompounds = compounds.filter(compound => 
+                compound.id.toLowerCase().includes(searchTerm) ||
+                compound.smiles.toLowerCase().includes(searchTerm) ||
+                compound.smarts.toLowerCase().includes(searchTerm) ||
+                compound.molecularWeight.toLowerCase().includes(searchTerm) ||
+                compound.logP.toLowerCase().includes(searchTerm) ||
+                compound.bindingEnergy.toLowerCase().includes(searchTerm) ||
+                compound.ic50.toLowerCase().includes(searchTerm) ||
+                compound.goodness.toString().includes(searchTerm) ||
+                compound.category.toLowerCase().includes(searchTerm) ||
+                compound.pathways.some(pathway => pathway.toLowerCase().includes(searchTerm))
+            );
+            renderCompounds(filteredCompounds);
+        });
+        
+        // Filter buttons
+        document.querySelectorAll('.filter-btn').forEach(button => {
+            button.addEventListener('click', function() {
+                const filter = this.getAttribute('data-filter');
+                let filteredCompounds = compounds;
+                
+                if (filter === 'high-binding') {
+                    filteredCompounds = compounds.filter(c => parseFloat(c.bindingEnergy) <= -8.5);
+                } else if (filter === 'high-goodness') {
+                    filteredCompounds = compounds.filter(c => parseFloat(c.goodness) >= 0.80);
+                } else if (filter === 'fluorinated') {
+                    filteredCompounds = compounds.filter(c => c.category === 'fluorinated');
+                } else if (filter === 'brominated') {
+                    filteredCompounds = compounds.filter(c => c.category === 'brominated');
+                } else if (filter === 'methoxy') {
+                    filteredCompounds = compounds.filter(c => c.category === 'methoxy');
+                }
+                
+                renderCompounds(filteredCompounds);
+                
+                // Toggle active state
+                document.querySelectorAll('.filter-btn').forEach(btn => {
+                    btn.classList.remove('active');
+                    btn.classList.remove('bg-blue-600');
+                    btn.classList.add('bg-slate-800');
+                });
+                
+                this.classList.add('active');
+                this.classList.remove('bg-slate-800');
+                this.classList.add('bg-blue-600');
+            });
+        });
+
+        // Export functionality
+        document.getElementById('exportAllBtn').addEventListener('click', function() {
+            const data = JSON.stringify(compounds, null, 2);
+            const blob = new Blob([data], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'compound_database_export.json';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        });
+
+        document.getElementById('exportCompoundBtn').addEventListener('click', function() {
+            if (currentCompoundId) {
+                const compound = compounds.find(c => c.id === currentCompoundId);
+                const data = JSON.stringify(compound, null, 2);
+                const blob = new Blob([data], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `compound_${currentCompoundId}_export.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            }
+        });
+
+        // Back to list button
+        document.getElementById('backToListBtn').addEventListener('click', function() {
+            closeModal();
+        });
+
+        // Initial render
+        document.addEventListener('DOMContentLoaded', () => {
+            renderCompounds();
+            initBackground();
+        });
+
+        // Handle click outside of modal content to close
+        window.addEventListener('click', (e) => {
+            const modal = document.getElementById('modal');
+            if (e.target === modal) {
+                closeModal();
+            }
+        });
+
+        // Handle escape key to close modal
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && !document.getElementById('modal').classList.contains('hidden')) {
+                closeModal();
+            }
+        });
+
+        // Make functions available globally
+        window.showDetails = showDetails;
+        window.closeModal = closeModal;
+    </script>
+<script>document.body.addEventListener('wheel', e => { if (!e.ctrlKey) return; e.preventDefault(); return }, { passive: false })</script>
+	</body>
+</html>
